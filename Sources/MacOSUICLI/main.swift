@@ -15,7 +15,12 @@ struct MacOSUICLI: ParsableCommand {
     
     func run() throws {
         print("MacOSUICLI - Command-line tool for macOS UI automation")
+        print("Version: \(MacOSUICLI.configuration.version)")
         print("Use --help to see available commands")
+        
+        // We'll properly integrate with Haxcessibility in a later issue
+        // For now, just acknowledge its existence
+        print("Haxcessibility library integration: planned for future implementation")
     }
 }
 

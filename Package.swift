@@ -24,6 +24,9 @@ let package = Package(
             cSettings: [
                 .headerSearchPath("../../vendor/Haxcessibility/Classes"),
                 .headerSearchPath("../../vendor/Haxcessibility/Other Sources")
+            ],
+            linkerSettings: [
+                .linkedFramework("AppKit")
             ]
         ),
         .testTarget(

@@ -1218,6 +1218,10 @@
       "inputs" : [
         {
           "kind" : "file",
+          "name" : "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/Sources/MacOSUICLI/HaxcessibilityWrapper.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/Sources/MacOSUICLI/main.swift"
         },
         {
@@ -1237,6 +1241,7 @@
       "moduleName" : "MacOSUICLI",
       "moduleOutputPath" : "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/Modules/MacOSUICLI.swiftmodule",
       "objects" : [
+        "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/MacOSUICLI.build/HaxcessibilityWrapper.swift.o",
         "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/MacOSUICLI.build/main.swift.o"
       ],
       "otherArguments" : [
@@ -1289,6 +1294,10 @@
       "outputs" : [
         {
           "kind" : "file",
+          "name" : "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/MacOSUICLI.build/HaxcessibilityWrapper.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/MacOSUICLI.build/main.swift.o"
         },
         {
@@ -1298,6 +1307,7 @@
       ],
       "prepareForIndexing" : false,
       "sources" : [
+        "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/Sources/MacOSUICLI/HaxcessibilityWrapper.swift",
         "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/Sources/MacOSUICLI/main.swift"
       ],
       "tempsPath" : "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/MacOSUICLI.build",
@@ -2274,7 +2284,7 @@
       "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/checkouts/swift-argument-parser/Sources/ArgumentParser/Utilities/StringExtensions.swift",
       "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/checkouts/swift-argument-parser/Sources/ArgumentParser/Utilities/Tree.swift",
       "-I",
-      "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/Modules-tool",
+      "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/Modules",
       "-target",
       "arm64-apple-macosx10.13",
       "-enable-batch-mode",
@@ -2291,7 +2301,7 @@
       "-parse-as-library",
       "-emit-objc-header",
       "-emit-objc-header-path",
-      "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/ArgumentParser-tool.build/ArgumentParser-Swift.h",
+      "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/ArgumentParser.build/ArgumentParser-Swift.h",
       "-swift-version",
       "5",
       "-enable-experimental-feature",
@@ -2380,6 +2390,7 @@
       "MacOSUICLI",
       "-incremental",
       "-c",
+      "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/Sources/MacOSUICLI/HaxcessibilityWrapper.swift",
       "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/Sources/MacOSUICLI/main.swift",
       "-I",
       "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/Modules",
@@ -2565,7 +2576,7 @@
       "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/checkouts/swift-argument-parser/Tools/generate-manual/MDoc/MDocSerializationContext.swift",
       "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/checkouts/swift-argument-parser/Tools/generate-manual/MDoc/String+Escaping.swift",
       "-I",
-      "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/Modules-tool",
+      "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/Modules",
       "-target",
       "arm64-apple-macosx10.13",
       "-enable-batch-mode",
@@ -3048,6 +3059,10 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/Sources/MacOSUICLI/HaxcessibilityWrapper.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/Sources/MacOSUICLI/main.swift"
         }
       ],
@@ -3245,6 +3260,10 @@
         {
           "kind" : "file",
           "name" : "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/ArgumentParserToolInfo.build/ToolInfo.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/MacOSUICLI.build/HaxcessibilityWrapper.swift.o"
         },
         {
           "kind" : "file",
@@ -4343,6 +4362,10 @@
         {
           "kind" : "file",
           "name" : "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/ArgumentParserToolInfo.build/ToolInfo.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/MacOSUICLI.build/HaxcessibilityWrapper.swift.o"
         },
         {
           "kind" : "file",
