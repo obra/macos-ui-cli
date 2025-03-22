@@ -52,9 +52,9 @@ public class Application {
         self.isFrontmost = false
     }
     
-    /// Gets the windows of the application
-    /// - Returns: An array of window information (empty for now)
-    public func getWindows() -> [String] {
+    /// Gets a simple list of window descriptions
+    /// - Returns: An array of window descriptions
+    public func getWindowDescriptions() -> [String] {
         #if HAXCESSIBILITY_AVAILABLE
         if let haxApp = self.haxApplication as? HAXApplication {
             return haxApp.windows.map { window in

@@ -97,6 +97,195 @@ struct ApplicationsCommand: ParsableCommand {
     }
 }
 
+/// Command to list and find windows
+struct WindowsCommand: ParsableCommand {
+    static var configuration = CommandConfiguration(
+        commandName: "windows",
+        abstract: "List and find windows"
+    )
+    
+    @Flag(name: .long, help: "Show the focused window")
+    var focused = false
+    
+    @Option(name: .shortAndLong, help: "Application name to list windows for")
+    var app: String?
+    
+    @Option(name: .shortAndLong, help: "Application PID to list windows for")
+    var pid: Int32?
+    
+    func run() throws {
+        // Get the application first
+        var application: Application? = nil
+        
+        if let appName = app {
+            application = ApplicationManager.getApplicationByName(appName)
+            if application == nil {
+                print("No application found with name: \(appName)")
+                return
+            }
+        } else if let appPid = pid {
+            application = ApplicationManager.getApplicationByPID(appPid)
+            if application == nil {
+                print("No application found with PID: \(appPid)")
+                return
+            }
+        } else if focused {
+            application = ApplicationManager.getFocusedApplication()
+            if application == nil {
+                print("No focused application found")
+                return
+            }
+        }
+        
+        // If no application specified, use the focused one
+        if application == nil {
+            application = ApplicationManager.getFocusedApplication()
+            if application == nil {
+                print("No focused application found")
+                return
+            }
+        }
+        
+        // Get and display windows
+        guard let app = application else { return }
+        
+        print("Windows for \(app.name):")
+        let windows = app.getWindows()
+        
+        if windows.isEmpty {
+            print("No windows found")
+        } else {
+            for (index, window) in windows.enumerated() {
+                print("\(index + 1). \(window.title) - \(window.frame.width)x\(window.frame.height)")
+            }
+        }
+    }
+}
+
+/// Command to find, inspect, and interact with UI elements
+struct ElementsCommand: ParsableCommand {
+    static var configuration = CommandConfiguration(
+        commandName: "elements",
+        abstract: "Find, inspect, and interact with UI elements"
+    )
+    
+    @Flag(name: .long, help: "Show the focused element")
+    var focused = false
+    
+    @Option(name: .long, help: "Find elements by role (button, textField, etc.)")
+    var role: String?
+    
+    @Option(name: .long, help: "Find elements by title or label")
+    var title: String?
+    
+    @Option(name: .long, help: "Find element by path (e.g., 'window[Main]/button[OK]')")
+    var path: String?
+    
+    @Option(name: .long, help: "Application name to search in")
+    var app: String?
+    
+    @Option(name: .long, help: "Application PID to search in")
+    var pid: Int32?
+    
+    func run() throws {
+        // Handle focused element request
+        if focused {
+            if let element = ElementFinder.getFocusedElement() {
+                print("Focused element:")
+                printElementDetails(element)
+            } else {
+                print("No focused element found")
+            }
+            return
+        }
+        
+        // Get the application first
+        var application: Application? = nil
+        
+        if let appName = app {
+            application = ApplicationManager.getApplicationByName(appName)
+            if application == nil {
+                print("No application found with name: \(appName)")
+                return
+            }
+        } else if let appPid = pid {
+            application = ApplicationManager.getApplicationByPID(appPid)
+            if application == nil {
+                print("No application found with PID: \(appPid)")
+                return
+            }
+        } else {
+            application = ApplicationManager.getFocusedApplication()
+            if application == nil {
+                print("No focused application found")
+                return
+            }
+        }
+        
+        guard let app = application else { return }
+        print("Searching in application: \(app.name)")
+        
+        // Get the focused window by default
+        guard let window = app.getFocusedWindow() else {
+            print("No focused window found")
+            return
+        }
+        
+        // Convert Window to Element for searching
+        let rootElement = Element(role: "window", title: window.title)
+        
+        // Handle path search
+        if let pathQuery = path {
+            if let element = ElementFinder.findElementByPath(pathQuery, in: rootElement) {
+                print("Element found at path '\(pathQuery)':")
+                printElementDetails(element)
+            } else {
+                print("No element found at path '\(pathQuery)'")
+            }
+            return
+        }
+        
+        // Handle role/title search
+        let elements = ElementFinder.findElements(
+            in: rootElement,
+            byRole: role,
+            byTitle: title
+        )
+        
+        if elements.isEmpty {
+            print("No matching elements found")
+        } else {
+            print("Found \(elements.count) matching elements:")
+            for (index, element) in elements.enumerated() {
+                print("\(index + 1). \(element.role): \(element.title)")
+            }
+        }
+    }
+    
+    /// Prints detailed information about an element
+    /// - Parameter element: The element to print details for
+    private func printElementDetails(_ element: Element) {
+        print("- Role: \(element.role)")
+        print("- Title: \(element.title)")
+        print("- Has children: \(element.hasChildren)")
+        
+        let attributes = element.getAttributes()
+        if !attributes.isEmpty {
+            print("- Attributes:")
+            for (key, value) in attributes {
+                print("  - \(key): \(value)")
+            }
+        }
+        
+        if !element.children.isEmpty {
+            print("- Children:")
+            for (index, child) in element.children.enumerated() {
+                print("  \(index + 1). \(child.role): \(child.title)")
+            }
+        }
+    }
+}
+
 struct MacOSUICLI: ParsableCommand {
     static var configuration = CommandConfiguration(
         commandName: "macos-ui-cli",
@@ -104,7 +293,9 @@ struct MacOSUICLI: ParsableCommand {
         version: "0.1.0",
         subcommands: [
             PermissionsCommand.self,
-            ApplicationsCommand.self
+            ApplicationsCommand.self,
+            WindowsCommand.self,
+            ElementsCommand.self
         ],
         defaultSubcommand: nil
     )

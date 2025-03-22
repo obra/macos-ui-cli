@@ -12,6 +12,10 @@ final class ApplicationAccessTests: XCTestCase {
         // In a real environment, we'd expect a focused app, but in testing we'll be more lenient
         if app == nil {
             print("Note: No focused application detected during test, this is acceptable in test environment")
+        } else {
+            // Make sure we can call getWindowDescriptions() without crashing
+            let descriptions = app?.getWindowDescriptions()
+            XCTAssertNotNil(descriptions, "Should be able to get window descriptions")
         }
         // Test passes either way - we're just making sure the code doesn't crash
     }
