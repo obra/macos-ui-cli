@@ -33,28 +33,39 @@ The tool allows you to:
 
 ### Building from Source
 
-1. Clone the repository:
+1. Clone the repository with submodules:
    ```
-   git clone https://github.com/yourusername/macos-ui-cli.git
+   git clone --recurse-submodules https://github.com/yourusername/macos-ui-cli.git
    cd macos-ui-cli
    ```
+   
+   If you already cloned the repository without `--recurse-submodules`, run:
+   ```
+   git submodule update --init
+   ```
 
-2. Build the project:
+2. Set up the Haxcessibility library:
+   ```
+   ./setup-haxcessibility.sh
+   ```
+   This creates necessary symbolic links to make the Haxcessibility submodule work with Swift Package Manager without modifying its source files.
+
+3. Build the project:
    ```
    swift build
    ```
 
-3. Create the app wrapper for accessibility permissions:
+4. Create the app wrapper for accessibility permissions:
    ```
    ./.build/debug/macos-ui-cli permissions --create-wrapper
    ```
 
-4. Run the executable through the app wrapper:
+5. Run the executable through the app wrapper:
    ```
    /Applications/macos-ui-cli.app/Contents/MacOS/macos-ui-cli
    ```
 
-5. Grant accessibility permissions when prompted by macOS
+6. Grant accessibility permissions when prompted by macOS
 
 ## Usage
 
@@ -252,13 +263,23 @@ Simulate key combinations:
 
 ### Setting up the Development Environment
 
-1. Clone the repository:
+1. Clone the repository with submodules:
    ```
-   git clone https://github.com/yourusername/macos-ui-cli.git
+   git clone --recurse-submodules https://github.com/yourusername/macos-ui-cli.git
    cd macos-ui-cli
    ```
+   
+   If you already cloned the repository without `--recurse-submodules`, run:
+   ```
+   git submodule update --init
+   ```
 
-2. Open the package in Xcode (optional):
+2. Set up the Haxcessibility library:
+   ```
+   ./setup-haxcessibility.sh
+   ```
+
+3. Open the package in Xcode (optional):
    ```
    open Package.swift
    ```
@@ -496,5 +517,22 @@ The project was developed as a demonstration of Claude's coding capabilities and
 
 ## Acknowledgments
 
-- [Haxcessibility](https://github.com/numist/Haxcessibility) - Numist's port of the Objective-C library providing access to macOS accessibility APIs
+- [Haxcessibility](https://github.com/numist/Haxcessibility) - Numist's port of the Objective-C library providing access to macOS accessibility APIs, integrated as an unmodified git submodule
 - [Swift Argument Parser](https://github.com/apple/swift-argument-parser) - Command-line interface parsing framework
+
+## Technical Implementation Notes
+
+### Git Submodule Integration
+
+This project uses Haxcessibility as an unmodified git submodule in the `vendor/Haxcessibility` directory. We've taken special care to integrate it without modifying any of its source files:
+
+1. **Why a submodule?** Using a git submodule allows us to track the exact version of Haxcessibility we're using, make it easy to update to newer versions, and respect the original codebase without modifications.
+
+2. **Symbolic Link Approach:** The `setup-haxcessibility.sh` script creates symbolic links to handle the angle bracket imports (`#import <Haxcessibility/Header.h>`) without modifying the original source files. This is why you'll see untracked files in the submodule after running the setup script - these are generated files needed by our build process but not part of the original repository.
+
+3. **Build Configuration:** The Package.swift file is configured to build directly from the vendor directory, with proper header search paths to make the imports work correctly.
+
+This approach ensures that we can:
+- Use the original, unmodified Haxcessibility code
+- Easily update from upstream when needed
+- Maintain a clean separation between our code and the library code
