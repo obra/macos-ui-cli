@@ -63,19 +63,19 @@ After implementing core functionality:
 ### Gate 4: Pre-Completion Verification
 
 Before declaring the task complete perform these MANDATORY checks:
-- [ ] Run ALL verification commands (tests, linting, typechecking)
-- [ ] Write function-level documentation for all functions explaining what they do, their parameters, return values, and usage examples where appropriate.
-- [ ] Add explanatory comments for any non-obvious or tricky code that might confuse another experienced developer who isn't familiar with this specific codebase.
-- [ ] Update the README.md. It should always include:
-	- [ ] a set of examples showing how to use all the commandline tools in the project. 
-	- [ ] how to run the test suite
-	- [ ] steps needed to set up a development environment
-- [ ] Run the unit tests by themselves. Verify that they to completion and pass and that there is no unexpected output
+- [x] Run ALL verification commands (tests, linting, typechecking)
+- [x] Write function-level documentation for all functions explaining what they do, their parameters, return values, and usage examples where appropriate.
+- [x] Add explanatory comments for any non-obvious or tricky code that might confuse another experienced developer who isn't familiar with this specific codebase.
+- [x] Update the README.md. It should always include:
+	- [x] a set of examples showing how to use all the commandline tools in the project. 
+	- [x] how to run the test suite
+	- [x] steps needed to set up a development environment
+- [x] Run the unit tests by themselves. Verify that they to completion and pass and that there is no unexpected output
 
 ### Gate 5: Final commit for the issue 
-- [ ] Audit all uncommitted files in your working copy
-	- [ ] Make sure that all files are either committed or, if they're temporary files, removed.
-- [ ] Author a meaningful commit message for this change. Include details of your intent, as well as logs showing that you ran tests and that they passed.
+- [x] Audit all uncommitted files in your working copy
+	- [x] Make sure that all files are either committed or, if they're temporary files, removed.
+- [x] Author a meaningful commit message for this change. Include details of your intent, as well as logs showing that you ran tests and that they passed.
 
 FAILURE TO PASS ANY GATE INVALIDATES THE WHOLE IMPLEMENTATION. 
 YOU ARE NOT DONE UNTIL YOU CLEAR GATE 5.
