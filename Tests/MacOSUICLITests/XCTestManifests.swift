@@ -8,7 +8,9 @@ public func allTests() -> [XCTestCaseEntry] {
     return [
         testCase(MacOSUICLITests.allTests),
         testCase(AccessibilityPermissionsTests.allTests),
-        testCase(ApplicationAccessTests.allTests)
+        testCase(ApplicationAccessTests.allTests),
+        testCase(WindowDiscoveryTests.allTests),
+        testCase(ElementDiscoveryTests.allTests)
     ]
 }
 #endif
