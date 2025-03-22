@@ -71,15 +71,15 @@ Before writing ANY implementation code, confirm completion of ALL of these tasks
 
 ### Gate 2: Implement the functionality
 
-- [ ] Create permission request and validation functions
-- [ ] Implement process discovery to find running applications
-- [ ] Create Swift wrapper for HAXSystem
-- [ ] Implement methods to get focused application
-- [ ] Create Swift wrapper for HAXApplication
-- [ ] Implement application connection by PID
-- [ ] Implement application lookup by name
-- [ ] Create clean Swift models for application properties
-- [ ] Implement methods to get application windows
+- [x] Create permission request and validation functions
+- [x] Implement process discovery to find running applications
+- [x] Create Swift wrapper for HAXSystem
+- [x] Implement methods to get focused application
+- [x] Create Swift wrapper for HAXApplication
+- [x] Implement application connection by PID
+- [x] Implement application lookup by name
+- [x] Create clean Swift models for application properties
+- [x] Implement methods to get application windows
 
 ### Gate 3: Mid-Implementation Review 
 
