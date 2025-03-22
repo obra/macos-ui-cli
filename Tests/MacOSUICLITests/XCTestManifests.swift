@@ -11,7 +11,8 @@ public func allTests() -> [XCTestCaseEntry] {
         testCase(ApplicationAccessTests.allTests),
         testCase(WindowDiscoveryTests.allTests),
         testCase(ElementDiscoveryTests.allTests),
-        testCase(UIInteractionTests.allTests)
+        testCase(UIInteractionTests.allTests),
+        testCase(CommandStructureTests.allTests)
     ]
 }
 #endif
