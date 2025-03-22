@@ -44,6 +44,8 @@ OPTIONS:
 SUBCOMMANDS:
   permissions             Check and request accessibility permissions
   apps                    List and find applications
+  windows                 List and find windows
+  elements                Find, inspect, and interact with UI elements
 ```
 
 ## Examples
@@ -99,6 +101,50 @@ List all accessible applications:
 macos-ui-cli apps
 ```
 
+### Window Management
+
+List windows of the focused application:
+```
+macos-ui-cli windows
+```
+
+List windows of a specific application:
+```
+macos-ui-cli windows --app "Calculator"
+```
+
+List windows of an application by PID:
+```
+macos-ui-cli windows --pid 12345
+```
+
+### UI Element Discovery
+
+Find the currently focused UI element:
+```
+macos-ui-cli elements --focused
+```
+
+Find all buttons in the focused application:
+```
+macos-ui-cli elements --role button
+```
+
+Find elements with a specific title:
+```
+macos-ui-cli elements --title "OK"
+```
+
+Find elements by path:
+```
+macos-ui-cli elements --path "window[Calculator]/button[=]"
+```
+
+Search within a specific application:
+```
+macos-ui-cli elements --app "Calculator" --role button
+```
+
 ## Development
 
 ### Setting up the Development Environment
@@ -145,14 +191,18 @@ macos-ui-cli permissions --open
 - Application discovery and access
 - PID and name-based application lookup
 - Application property inspection
+- Window enumeration and inspection
+- UI element discovery and traversal
+- Element property inspection
+- Element filtering by role or title
+- Path-based element lookup
 
 ### Future Features
-- Window enumeration
-- Element hierarchy traversal
-- Element property inspection
 - Button pressing and text field interaction
-- Window manipulation
+- Window manipulation (resize, move)
+- Element action execution (click, type, etc.)
 - Scripting support
+- Recording and replaying UI interactions
 
 ## License
 
