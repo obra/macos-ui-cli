@@ -1,6 +1,3 @@
-[submodule "Sources/Haxcessibility"]
-	path = Sources/Haxcessibility
-	url = https://github.com/numist/Haxcessibility.git
 [submodule "vendor/Haxcessibility"]
 	path = vendor/Haxcessibility
 	url = https://github.com/numist/Haxcessibility.git
