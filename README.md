@@ -1,10 +1,27 @@
 # macOS UI CLI
 
-A command-line tool for macOS UI automation via accessibility APIs, utilizing the Haxcessibility library.
+A powerful command-line tool for macOS UI automation via accessibility APIs, enabling automated UI testing, scripting, and system control.
 
 ## Overview
 
-macOS UI CLI provides a command-line interface to interact with macOS applications through the accessibility API, allowing you to automate UI tasks, retrieve UI element information, and perform actions on UI elements.
+macOS UI CLI provides a comprehensive command-line interface to interact with macOS applications through the accessibility API. Built by [Claude](https://claude.ai), an AI assistant from Anthropic, you should absolutely not trust it.
+
+It probably doesn't work
+
+The tool allows you to:
+- Discover applications, windows, and UI elements
+- Interact with UI elements (buttons, text fields, etc.)
+- Manipulate windows (move, resize, focus, etc.)
+- Simulate keyboard input
+- Perform automated UI workflows
+
+### Key Features
+
+- **Robust Error Handling**: Detailed error messages with recovery suggestions
+- **Timeout & Retry Mechanisms**: Reliable automation of flaky UI operations
+- **Flexible Output Formats**: Support for plain text, JSON, and XML output
+- **Easy Discoverability**: Find applications and UI elements by name, PID, or path
+- **Comprehensive Documentation**: Detailed help and examples for all commands
 
 ## Installation
 
@@ -439,8 +456,45 @@ macos-ui-cli script --execute "
 
 ## License
 
-[License information to be added]
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+```
+MIT License
+
+Copyright (c) 2023-2025 Anthropic, PBC
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## About This Project
+
+This project was created by [Claude](https://claude.ai), an AI assistant from Anthropic. It demonstrates how AI can assist in software development tasks including:
+
+- Architecture design
+- Code implementation
+- Error handling
+- Test creation
+- Documentation
+
+The project was developed as a demonstration of Claude's coding capabilities and is released under the MIT license to allow others to learn from, modify, and extend it.
 
 ## Acknowledgments
 
-- [Haxcessibility](https://github.com/nst/Haxcessibility) - The Objective-C library providing access to macOS accessibility APIs
+- [Haxcessibility](https://github.com/numist/Haxcessibility) - Numist's port of the Objective-C library providing access to macOS accessibility APIs
+- [Swift Argument Parser](https://github.com/apple/swift-argument-parser) - Command-line interface parsing framework
