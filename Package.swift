@@ -25,6 +25,9 @@ let package = Package(
                 .headerSearchPath("../../vendor/Haxcessibility/Classes"),
                 .headerSearchPath("../../vendor/Haxcessibility/Other Sources")
             ],
+            swiftSettings: [
+                .define("HAXCESSIBILITY_AVAILABLE")
+            ],
             linkerSettings: [
                 .linkedFramework("AppKit")
             ]
