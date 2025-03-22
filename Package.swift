@@ -16,22 +16,48 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.0.0")
     ],
     targets: [
-        .executableTarget(
-            name: "MacOSUICLI",
-            dependencies: [
-                .product(name: "ArgumentParser", package: "swift-argument-parser")
+        // Haxcessibility target, built directly from our source
+        .target(
+            name: "Haxcessibility",
+            dependencies: [],
+            exclude: [
+                "Haxcessibility.xcodeproj",
+                "TODO.mdown",
+                "README.mdown",
+                "LICENSE",
+                "Resources"
             ],
+            publicHeadersPath: ".",
             cSettings: [
-                .headerSearchPath("../../vendor/Haxcessibility/Classes"),
-                .headerSearchPath("../../vendor/Haxcessibility/Other Sources")
+                .headerSearchPath("Classes"),
+                .headerSearchPath("Other Sources")
             ],
             linkerSettings: [
                 .linkedFramework("AppKit")
             ]
         ),
+        
+        .executableTarget(
+            name: "MacOSUICLI",
+            dependencies: [
+                "Haxcessibility",
+                .product(name: "ArgumentParser", package: "swift-argument-parser")
+            ],
+            // Info.plist is handled separately for command-line tools
+            swiftSettings: [
+                .define("HAXCESSIBILITY_AVAILABLE")
+            ],
+            linkerSettings: [
+                .linkedFramework("AppKit")
+            ]
+        ),
+        
         .testTarget(
             name: "MacOSUICLITests",
-            dependencies: ["MacOSUICLI"]
+            dependencies: ["MacOSUICLI"],
+            swiftSettings: [
+                .define("HAXCESSIBILITY_AVAILABLE")
+            ]
         )
     ]
 )

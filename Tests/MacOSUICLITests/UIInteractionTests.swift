@@ -11,9 +11,12 @@ final class UIInteractionTests: XCTestCase {
         
         XCTAssertFalse(button.wasPressed, "Button should not be pressed initially")
         
-        let success = button.press()
-        XCTAssertTrue(success, "Button press should succeed")
-        XCTAssertTrue(button.wasPressed, "Button should be pressed after press() method")
+        do {
+            try button.press()
+            XCTAssertTrue(button.wasPressed, "Button should be pressed after press() method")
+        } catch {
+            XCTFail("Button press should not throw error: \(error)")
+        }
     }
     
     func testTextFieldInteraction() {
@@ -21,44 +24,66 @@ final class UIInteractionTests: XCTestCase {
         let textField = MockTextFieldElement(title: "Name", value: "Initial Text")
         
         // Test reading
-        XCTAssertEqual(textField.getValue(), "Initial Text", "Text field should return its value")
-        
-        // Test writing
-        let writeSuccess = textField.setValue("New Text")
-        XCTAssertTrue(writeSuccess, "Setting text field value should succeed")
-        XCTAssertEqual(textField.getValue(), "New Text", "Text field should have new value")
+        do {
+            let value = try textField.getValue()
+            XCTAssertEqual(value, "Initial Text", "Text field should return its value")
+            
+            // Test writing
+            try textField.setValue("New Text")
+            let newValue = try textField.getValue()
+            XCTAssertEqual(newValue, "New Text", "Text field should have new value")
+        } catch {
+            XCTFail("Text field operations should not throw error: \(error)")
+        }
     }
     
     func testWindowManipulation() {
         // Test window manipulation (move, resize, focus)
         let window = MockWindow(title: "Test Window", frame: CGRect(x: 0, y: 0, width: 800, height: 600))
         
-        // Test window position change
-        let moveSuccess = window.setPosition(CGPoint(x: 100, y: 100))
-        XCTAssertTrue(moveSuccess, "Setting window position should succeed")
-        XCTAssertEqual(window.frame.origin.x, 100, "Window x position should be updated")
-        XCTAssertEqual(window.frame.origin.y, 100, "Window y position should be updated")
-        
-        // Test window size change
-        let resizeSuccess = window.setSize(CGSize(width: 1000, height: 800))
-        XCTAssertTrue(resizeSuccess, "Setting window size should succeed")
-        XCTAssertEqual(window.frame.size.width, 1000, "Window width should be updated")
-        XCTAssertEqual(window.frame.size.height, 800, "Window height should be updated")
-        
-        // Test focus
-        let focusSuccess = window.focus()
-        XCTAssertTrue(focusSuccess, "Setting window focus should succeed")
-        XCTAssertTrue(window.isFocused, "Window should be focused after focus() method")
+        do {
+            // Test window position change
+            try window.setPosition(CGPoint(x: 100, y: 100))
+            XCTAssertEqual(window.frame.origin.x, 100, "Window x position should be updated")
+            XCTAssertEqual(window.frame.origin.y, 100, "Window y position should be updated")
+            
+            // Test window size change
+            try window.setSize(CGSize(width: 1000, height: 800))
+            XCTAssertEqual(window.frame.size.width, 1000, "Window width should be updated")
+            XCTAssertEqual(window.frame.size.height, 800, "Window height should be updated")
+            
+            // Test focus
+            try window.focus()
+            XCTAssertTrue(window.isFocused, "Window should be focused after focus() method")
+        } catch {
+            XCTFail("Window operations should not throw error: \(error)")
+        }
     }
     
     func testKeyboardInput() {
         // Test keyboard input simulation
-        let success = KeyboardInput.typeString("Hello, World!")
-        XCTAssertTrue(success, "Keyboard input should succeed")
+        do {
+            // Test throwing version
+            try KeyboardInput.typeString("Hello, World!")
+            
+            // Test non-throwing version
+            let success = KeyboardInput.typeStringNoThrow("Hello, World!")
+            XCTAssertTrue(success, "Non-throwing version should return true")
+        } catch {
+            XCTFail("Keyboard input should not throw error: \(error)")
+        }
         
         // Test key combination
-        let combinationSuccess = KeyboardInput.pressKeyCombination([.command, .option], key: "c")
-        XCTAssertTrue(combinationSuccess, "Key combination should succeed")
+        do {
+            // Test throwing version
+            try KeyboardInput.pressKeyCombination([.command, .option], key: "c")
+            
+            // Test non-throwing version
+            let success = KeyboardInput.pressKeyCombinationNoThrow([.command, .option], key: "c")
+            XCTAssertTrue(success, "Non-throwing version should return true")
+        } catch {
+            XCTFail("Key combination should not throw error: \(error)")
+        }
     }
     
     func testElementActionDiscovery() {
@@ -66,11 +91,30 @@ final class UIInteractionTests: XCTestCase {
         let button = MockButtonElement(title: "OK")
         let textField = MockTextFieldElement(title: "Name", value: "Text")
         
-        let buttonActions = button.getAvailableActions()
-        XCTAssertTrue(buttonActions.contains("press"), "Button should support press action")
+        do {
+            let buttonActions = try button.getAvailableActions()
+            XCTAssertTrue(buttonActions.contains("press"), "Button should support press action")
+            
+            let textFieldActions = try textField.getAvailableActions()
+            XCTAssertTrue(textFieldActions.contains("setValue"), "TextField should support setValue action")
+        } catch {
+            XCTFail("Getting available actions should not throw error: \(error)")
+        }
+    }
+    
+    func testErrorHandlingForInvalidAction() {
+        // Test that performing an invalid action throws the correct error
+        let button = MockButtonElement(title: "OK")
         
-        let textFieldActions = textField.getAvailableActions()
-        XCTAssertTrue(textFieldActions.contains("setValue"), "TextField should support setValue action")
+        do {
+            try button.performAction("invalidAction")
+            XCTFail("Performing invalid action should throw error")
+        } catch let error as UIElementError {
+            XCTAssertEqual(error.errorCode, ErrorCode.elementDoesNotSupportAction.rawValue)
+            XCTAssertTrue(error.description.contains("invalidAction"), "Error should mention the invalid action")
+        } catch {
+            XCTFail("Unexpected error type: \(error)")
+        }
     }
     
     static var allTests = [
@@ -78,6 +122,7 @@ final class UIInteractionTests: XCTestCase {
         ("testTextFieldInteraction", testTextFieldInteraction),
         ("testWindowManipulation", testWindowManipulation),
         ("testKeyboardInput", testKeyboardInput),
-        ("testElementActionDiscovery", testElementActionDiscovery)
+        ("testElementActionDiscovery", testElementActionDiscovery),
+        ("testErrorHandlingForInvalidAction", testErrorHandlingForInvalidAction)
     ]
 }

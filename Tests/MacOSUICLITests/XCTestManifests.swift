@@ -12,7 +12,9 @@ public func allTests() -> [XCTestCaseEntry] {
         testCase(WindowDiscoveryTests.allTests),
         testCase(ElementDiscoveryTests.allTests),
         testCase(UIInteractionTests.allTests),
-        testCase(CommandStructureTests.allTests)
+        testCase(CommandStructureTests.allTests),
+        testCase(OutputFormattingTests.allTests),
+        testCase(ErrorHandlingTests.allTests)
     ]
 }
 #endif

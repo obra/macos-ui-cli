@@ -9,7 +9,7 @@ import ArgumentParser
 final class MacOSUICLITests: XCTestCase {
     func testVersionFlag() throws {
         // Test the version flag
-        XCTAssertEqual(MacOSUICLI.configuration.version, "0.1.0")
+        XCTAssertEqual(MacOSUICLI.configuration.version, "0.2.0")
     }
     
     func testHaxcessibilityAvailability() throws {

@@ -45,15 +45,27 @@ final class CommandStructureTests: XCTestCase {
     
     // Test that the root command displays help information
     func testRootCommandHelp() throws {
-        // Skip direct process execution tests since we likely don't have the compiled executable during testing
-        // This is a placeholder to be filled later
-        XCTFail("Root command help test needs to be implemented")
+        // Test that the root command's discussion includes help information
+        let discussion = MacOSUICLI.configuration.discussion
+        XCTAssertFalse(discussion.isEmpty, "Root command should have discussion text")
+        XCTAssertTrue(discussion.contains("discover"), "Discussion should mention discover commands")
+        XCTAssertTrue(discussion.contains("interact"), "Discussion should mention interact commands")
+        XCTAssertTrue(discussion.contains("util"), "Discussion should mention utility commands")
+        XCTAssertTrue(discussion.contains("--help"), "Discussion should mention help flag")
     }
     
     // Test that the version flag works
     func testVersionFlag() throws {
-        // Skip direct process execution tests
-        XCTFail("Version flag test needs to be implemented")
+        // Test that the version is set
+        XCTAssertFalse(MacOSUICLI.configuration.version.isEmpty, "Version should be set")
+        XCTAssertEqual(MacOSUICLI.configuration.version, "0.2.0", "Version should match expected value")
+        
+        // Test that there's a version command
+        let utilityCommands = MacOSUICLI.configuration.subcommands.first { $0 == UtilityCommands.self }
+        XCTAssertNotNil(utilityCommands, "Utility commands should exist")
+        
+        let versionCommand = UtilityCommands.configuration.subcommands.first { $0 == VersionCommand.self }
+        XCTAssertNotNil(versionCommand, "Version command should exist in utility commands")
     }
     
     // Test the hierarchical command structure
@@ -61,7 +73,16 @@ final class CommandStructureTests: XCTestCase {
         // Verify that the main command has the expected subcommands
         let subcommands = MacOSUICLI.configuration.subcommands
         
-        // Check for specific required commands
+        // Check for command groups
+        let hasDiscoveryCommands = subcommands.contains { $0 == DiscoveryCommands.self }
+        let hasInteractionCommands = subcommands.contains { $0 == InteractionCommands.self }
+        let hasUtilityCommands = subcommands.contains { $0 == UtilityCommands.self }
+        
+        XCTAssertTrue(hasDiscoveryCommands, "MacOSUICLI should have discovery commands group")
+        XCTAssertTrue(hasInteractionCommands, "MacOSUICLI should have interaction commands group")
+        XCTAssertTrue(hasUtilityCommands, "MacOSUICLI should have utility commands group")
+        
+        // Check for specific required commands (for backward compatibility)
         let hasPermissions = subcommands.contains { $0 == PermissionsCommand.self }
         let hasApps = subcommands.contains { $0 == ApplicationsCommand.self }
         let hasWindows = subcommands.contains { $0 == WindowsCommand.self }
@@ -71,7 +92,7 @@ final class CommandStructureTests: XCTestCase {
         let hasWindow = subcommands.contains { $0 == WindowCommand.self }
         let hasKeyboard = subcommands.contains { $0 == KeyboardCommand.self }
         
-        // Command structure should include these common commands
+        // Command structure should include these common commands for backward compatibility
         XCTAssertTrue(hasPermissions, "MacOSUICLI should have a permissions subcommand")
         XCTAssertTrue(hasApps, "MacOSUICLI should have an apps subcommand")
         XCTAssertTrue(hasWindows, "MacOSUICLI should have a windows subcommand")
@@ -81,31 +102,77 @@ final class CommandStructureTests: XCTestCase {
         XCTAssertTrue(hasWindow, "MacOSUICLI should have a window subcommand")
         XCTAssertTrue(hasKeyboard, "MacOSUICLI should have a keyboard subcommand")
         
-        // Check for grouping and documentation
-        XCTFail("Missing tests for command grouping and documentation")
+        // Check for command group structure
+        // Discovery commands
+        let discoverySubcommands = DiscoveryCommands.configuration.subcommands
+        XCTAssertTrue(discoverySubcommands.contains { $0 == ApplicationsCommand.self }, "Discovery commands should include apps command")
+        XCTAssertTrue(discoverySubcommands.contains { $0 == WindowsCommand.self }, "Discovery commands should include windows command")
+        XCTAssertTrue(discoverySubcommands.contains { $0 == ElementsCommand.self }, "Discovery commands should include elements command")
+        
+        // Interaction commands
+        let interactionSubcommands = InteractionCommands.configuration.subcommands
+        XCTAssertTrue(interactionSubcommands.contains { $0 == ButtonCommand.self }, "Interaction commands should include button command")
+        XCTAssertTrue(interactionSubcommands.contains { $0 == TextCommand.self }, "Interaction commands should include text command")
+        XCTAssertTrue(interactionSubcommands.contains { $0 == WindowCommand.self }, "Interaction commands should include window command")
+        XCTAssertTrue(interactionSubcommands.contains { $0 == KeyboardCommand.self }, "Interaction commands should include keyboard command")
+        
+        // Utility commands
+        let utilitySubcommands = UtilityCommands.configuration.subcommands
+        XCTAssertTrue(utilitySubcommands.contains { $0 == PermissionsCommand.self }, "Utility commands should include permissions command")
+        XCTAssertTrue(utilitySubcommands.contains { $0 == VersionCommand.self }, "Utility commands should include version command")
+        XCTAssertTrue(utilitySubcommands.contains { $0 == InfoCommand.self }, "Utility commands should include info command")
     }
     
     // Test that command help documentation is available for all commands
     func testCommandHelp() {
         // Check that all commands have help text
         XCTAssertFalse(MacOSUICLI.configuration.abstract.isEmpty, "Root command should have help text")
-        XCTAssertFalse(PermissionsCommand.configuration.abstract.isEmpty, "Permissions command should have help text")
-        XCTAssertFalse(ApplicationsCommand.configuration.abstract.isEmpty, "Applications command should have help text")
-        XCTAssertFalse(WindowsCommand.configuration.abstract.isEmpty, "Windows command should have help text")
-        XCTAssertFalse(ElementsCommand.configuration.abstract.isEmpty, "Elements command should have help text")
-        XCTAssertFalse(ButtonCommand.configuration.abstract.isEmpty, "Button command should have help text")
-        XCTAssertFalse(TextCommand.configuration.abstract.isEmpty, "Text command should have help text")
-        XCTAssertFalse(WindowCommand.configuration.abstract.isEmpty, "Window command should have help text")
-        XCTAssertFalse(KeyboardCommand.configuration.abstract.isEmpty, "Keyboard command should have help text")
+        XCTAssertFalse(DiscoveryCommands.configuration.abstract.isEmpty, "Discovery commands should have help text")
+        XCTAssertFalse(InteractionCommands.configuration.abstract.isEmpty, "Interaction commands should have help text")
+        XCTAssertFalse(UtilityCommands.configuration.abstract.isEmpty, "Utility commands should have help text")
         
-        // Check for detailed help text
-        XCTFail("Missing tests for detailed command help")
+        // Check that group commands have discussion text
+        XCTAssertFalse(DiscoveryCommands.configuration.discussion.isEmpty, "Discovery commands should have discussion text")
+        XCTAssertFalse(InteractionCommands.configuration.discussion.isEmpty, "Interaction commands should have discussion text")
+        XCTAssertFalse(UtilityCommands.configuration.discussion.isEmpty, "Utility commands should have discussion text")
+        
+        // Check that child commands have discussion text
+        XCTAssertFalse(ApplicationsCommand.configuration.discussion.isEmpty, "Applications command should have discussion text")
+        XCTAssertFalse(WindowsCommand.configuration.discussion.isEmpty, "Windows command should have discussion text")
+        XCTAssertFalse(ElementsCommand.configuration.discussion.isEmpty, "Elements command should have discussion text")
+        XCTAssertFalse(ButtonCommand.configuration.discussion.isEmpty, "Button command should have discussion text")
+        XCTAssertFalse(TextCommand.configuration.discussion.isEmpty, "Text command should have discussion text")
+        XCTAssertFalse(WindowCommand.configuration.discussion.isEmpty, "Window command should have discussion text")
+        XCTAssertFalse(KeyboardCommand.configuration.discussion.isEmpty, "Keyboard command should have discussion text")
+        XCTAssertFalse(PermissionsCommand.configuration.discussion.isEmpty, "Permissions command should have discussion text")
+        XCTAssertFalse(VersionCommand.configuration.discussion.isEmpty, "Version command should have discussion text")
+        XCTAssertFalse(InfoCommand.configuration.discussion.isEmpty, "Info command should have discussion text")
     }
     
     // Test that command examples are available
     func testCommandExamples() {
-        // Test that we have a CommandGroup that includes examples
-        XCTFail("Missing tests for command examples")
+        // Test that command groups include examples in their discussion
+        let discoveryDiscussion = DiscoveryCommands.configuration.discussion
+        XCTAssertTrue(discoveryDiscussion.contains("Examples:"), "Discovery commands should include examples")
+        XCTAssertTrue(discoveryDiscussion.contains("macos-ui-cli discover"), "Discovery examples should use correct prefix")
+        
+        let interactionDiscussion = InteractionCommands.configuration.discussion
+        XCTAssertTrue(interactionDiscussion.contains("Examples:"), "Interaction commands should include examples")
+        XCTAssertTrue(interactionDiscussion.contains("macos-ui-cli interact"), "Interaction examples should use correct prefix")
+        
+        let utilityDiscussion = UtilityCommands.configuration.discussion
+        XCTAssertTrue(utilityDiscussion.contains("Examples:"), "Utility commands should include examples")
+        XCTAssertTrue(utilityDiscussion.contains("macos-ui-cli util"), "Utility examples should use correct prefix")
+        
+        // Test that individual commands include examples in their discussion
+        let appsDiscussion = ApplicationsCommand.configuration.discussion
+        XCTAssertTrue(appsDiscussion.contains("Examples:"), "Apps command should include examples")
+        
+        let windowsDiscussion = WindowsCommand.configuration.discussion
+        XCTAssertTrue(windowsDiscussion.contains("Examples:"), "Windows command should include examples")
+        
+        let elementsDiscussion = ElementsCommand.configuration.discussion
+        XCTAssertTrue(elementsDiscussion.contains("Examples:"), "Elements command should include examples")
     }
 }
 

@@ -30,66 +30,65 @@ public class KeyboardInput {
     
     /// Simulates typing a string
     /// - Parameter string: The string to type
-    /// - Returns: True if successful, false otherwise
-    public static func typeString(_ string: String) -> Bool {
+    /// - Throws: InputError if typing fails, AccessibilityError if permissions are not granted
+    public static func typeString(_ string: String) throws {
         // Use CGEvent to simulate keyboard input
         // Implementation based on accessibility permissions
         
         // Make sure we have accessibility permissions
         guard AccessibilityPermissions.checkPermission() == .granted else {
-            print("Error: Accessibility permissions are required for keyboard input")
-            return false
+            throw AccessibilityError.permissionDenied
         }
         
         // Type each character in the string
-        for char in string {
-            if !typeCharacter(char) {
-                return false
+        try withTimeout(10.0) {
+            for char in string {
+                try typeCharacter(char)
             }
         }
-        
-        return true
     }
     
     /// Types a single character
     /// - Parameter char: The character to type
-    /// - Returns: True if successful, false otherwise
-    private static func typeCharacter(_ char: Character) -> Bool {
+    /// - Throws: InputError if typing fails
+    private static func typeCharacter(_ char: Character) throws {
         // Get the key code for the character
         guard let keyCode = keyCodeFor(char) else {
-            return false
+            throw InputError.keyboardInputFailed(key: String(char), reason: "Unknown key code")
         }
         
         // Check if we need shift for this character
         let needsShift = char.isUppercase || "~!@#$%^&*()_+{}|:\"<>?".contains(char)
         
         // Create the key down event
-        let keyDownEvent = CGEvent(keyboardEventSource: nil, 
-                                   virtualKey: keyCode, 
-                                   keyDown: true)
+        guard let keyDownEvent = CGEvent(keyboardEventSource: nil, 
+                                        virtualKey: keyCode, 
+                                        keyDown: true) else {
+            throw InputError.keyboardInputFailed(key: String(char), reason: "Failed to create key down event")
+        }
         
         // Apply shift if needed
         if needsShift {
-            keyDownEvent?.flags = .maskShift
+            keyDownEvent.flags = .maskShift
         }
         
         // Post the key down event
-        keyDownEvent?.post(tap: .cgAnnotatedSessionEventTap)
+        keyDownEvent.post(tap: .cgAnnotatedSessionEventTap)
         
         // Create the key up event
-        let keyUpEvent = CGEvent(keyboardEventSource: nil, 
-                                 virtualKey: keyCode, 
-                                 keyDown: false)
+        guard let keyUpEvent = CGEvent(keyboardEventSource: nil, 
+                                      virtualKey: keyCode, 
+                                      keyDown: false) else {
+            throw InputError.keyboardInputFailed(key: String(char), reason: "Failed to create key up event")
+        }
         
         // Apply shift if needed
         if needsShift {
-            keyUpEvent?.flags = .maskShift
+            keyUpEvent.flags = .maskShift
         }
         
         // Post the key up event
-        keyUpEvent?.post(tap: .cgAnnotatedSessionEventTap)
-        
-        return true
+        keyUpEvent.post(tap: .cgAnnotatedSessionEventTap)
     }
     
     /// Gets the virtual key code for a character
@@ -159,17 +158,22 @@ public class KeyboardInput {
     /// - Parameters:
     ///   - modifiers: Array of modifier keys to press
     ///   - key: The main key to press
-    /// - Returns: True if successful, false otherwise
-    public static func pressKeyCombination(_ modifiers: [Modifier], key: String) -> Bool {
+    /// - Throws: InputError if key combination fails, AccessibilityError if permissions are not granted
+    public static func pressKeyCombination(_ modifiers: [Modifier], key: String) throws {
         // Make sure we have accessibility permissions
         guard AccessibilityPermissions.checkPermission() == .granted else {
-            print("Error: Accessibility permissions are required for keyboard input")
-            return false
+            throw AccessibilityError.permissionDenied
+        }
+        
+        // Make sure the key is not empty
+        guard !key.isEmpty else {
+            throw InputError.keyboardInputFailed(key: "empty", reason: "Key cannot be empty")
         }
         
         // Get the key code for the character
-        guard let keyCode = keyCodeFor(key.first ?? "a") else {
-            return false
+        guard let keyChar = key.first,
+              let keyCode = keyCodeFor(keyChar) else {
+            throw InputError.keyboardInputFailed(key: key, reason: "Unknown key code")
         }
         
         // Combine modifier flags
@@ -178,28 +182,60 @@ public class KeyboardInput {
             flags.insert(modifier.flag)
         }
         
-        // Create the key down event
-        let keyDownEvent = CGEvent(keyboardEventSource: nil, 
-                                   virtualKey: keyCode, 
-                                   keyDown: true)
-        
-        // Apply modifiers
-        keyDownEvent?.flags = flags
-        
-        // Post the key down event
-        keyDownEvent?.post(tap: .cgAnnotatedSessionEventTap)
-        
-        // Create the key up event
-        let keyUpEvent = CGEvent(keyboardEventSource: nil, 
-                                 virtualKey: keyCode, 
-                                 keyDown: false)
-        
-        // Apply modifiers
-        keyUpEvent?.flags = flags
-        
-        // Post the key up event
-        keyUpEvent?.post(tap: .cgAnnotatedSessionEventTap)
-        
-        return true
+        try withTimeout(5.0) {
+            // Create the key down event
+            guard let keyDownEvent = CGEvent(keyboardEventSource: nil, 
+                                           virtualKey: keyCode, 
+                                           keyDown: true) else {
+                throw InputError.keyboardInputFailed(key: key, reason: "Failed to create key down event")
+            }
+            
+            // Apply modifiers
+            keyDownEvent.flags = flags
+            
+            // Post the key down event
+            keyDownEvent.post(tap: .cgAnnotatedSessionEventTap)
+            
+            // Create the key up event
+            guard let keyUpEvent = CGEvent(keyboardEventSource: nil, 
+                                         virtualKey: keyCode, 
+                                         keyDown: false) else {
+                throw InputError.keyboardInputFailed(key: key, reason: "Failed to create key up event")
+            }
+            
+            // Apply modifiers
+            keyUpEvent.flags = flags
+            
+            // Post the key up event
+            keyUpEvent.post(tap: .cgAnnotatedSessionEventTap)
+        }
+    }
+    
+    /// Safe version of typeString that doesn't throw
+    /// - Parameter string: The string to type
+    /// - Returns: True if successful, false otherwise
+    public static func typeStringNoThrow(_ string: String) -> Bool {
+        do {
+            try typeString(string)
+            return true
+        } catch {
+            DebugLogger.shared.logError(error)
+            return false
+        }
+    }
+    
+    /// Safe version of pressKeyCombination that doesn't throw
+    /// - Parameters:
+    ///   - modifiers: Array of modifier keys to press
+    ///   - key: The main key to press
+    /// - Returns: True if successful, false otherwise
+    public static func pressKeyCombinationNoThrow(_ modifiers: [Modifier], key: String) -> Bool {
+        do {
+            try pressKeyCombination(modifiers, key: key)
+            return true
+        } catch {
+            DebugLogger.shared.logError(error)
+            return false
+        }
     }
 }

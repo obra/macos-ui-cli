@@ -34,19 +34,48 @@ public class ButtonElement: Element {
     }
     
     /// Presses the button
-    /// - Returns: True if successful, false otherwise
-    public func press() -> Bool {
-        if let button = self.haxButton {
-            button.press()
-            return true
+    /// - Throws: UIElementError if the button cannot be pressed
+    public func press() throws {
+        guard let button = self.haxButton else {
+            throw UIElementError.invalidElementState(
+                description: "Button with title '\(title)'", 
+                state: "No underlying HAXButton element"
+            )
         }
-        return false
+        
+        do {
+            try withTimeoutAndRetry(timeout: 3.0, maxAttempts: 2) {
+                button.press()
+            }
+        } catch let error as OperationError {
+            // Rethrow timeout or retry errors
+            throw error
+        } catch {
+            // Convert other errors to UIElementError
+            throw UIElementError.invalidElementState(
+                description: "Button with title '\(title)'", 
+                state: "Failed to press: \(error.localizedDescription)"
+            )
+        }
+    }
+    
+    /// Safe version of press that doesn't throw
+    /// - Returns: True if successful, false otherwise
+    public func pressNoThrow() -> Bool {
+        do {
+            try press()
+            return true
+        } catch {
+            DebugLogger.shared.logError(error)
+            return false
+        }
     }
     
     /// Gets available actions for this button
     /// - Returns: Array of action names
-    public override func getAvailableActions() -> [String] {
-        var actions = super.getAvailableActions()
+    /// - Throws: UIElementError if actions cannot be retrieved
+    public override func getAvailableActions() throws -> [String] {
+        var actions = try super.getAvailableActions()
         actions.append("press")
         return actions
     }

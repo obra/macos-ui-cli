@@ -41,11 +41,11 @@ final class ElementDiscoveryTests: XCTestCase {
         window.addChild(textField)
         
         // Filter by role
-        let buttons = ElementFinder.findElements(in: window, byRole: "button")
+        let buttons = ElementFinder.findElementsNoThrow(in: window, byRole: "button")
         XCTAssertEqual(buttons.count, 2, "Should find 2 buttons")
         
         // Filter by title
-        let okButton = ElementFinder.findElements(in: window, byTitle: "OK")
+        let okButton = ElementFinder.findElementsNoThrow(in: window, byTitle: "OK")
         XCTAssertEqual(okButton.count, 1, "Should find 1 element with title OK")
         XCTAssertEqual(okButton.first?.role, "button", "Found element should be a button")
     }

@@ -18,39 +18,32 @@ public class MockWindow: Window {
         super.init(title: title, frame: frame, isFullscreen: isFullscreen)
     }
     
-    /// Simulates raising the window
-    /// - Returns: Always returns true for mocks
-    override public func raise() -> Bool {
-        return true
+    /// Brings the window to the front
+    /// - Throws: WindowError if the window cannot be raised
+    override public func raise() throws {
+        // In mock, we don't need to do anything
+        return
     }
     
-    /// Simulates closing the window
-    /// - Returns: Always returns true for mocks
-    override public func close() -> Bool {
-        return true
+    /// Closes the window
+    /// - Throws: WindowError if the window cannot be closed
+    override public func close() throws {
+        // In mock, we don't need to do anything
+        return
     }
     
-    /// Simulates focusing the window
-    /// - Returns: Always returns true for mocks
-    override public func focus() -> Bool {
+    /// Gets the UI elements in the window
+    /// - Returns: An array of UI elements in the window
+    /// - Throws: WindowError if elements cannot be retrieved
+    override public func getElements() throws -> [Element] {
+        // Return an empty array for testing
+        return []
+    }
+    
+    /// Sets focus to this window
+    /// - Throws: WindowError if focus cannot be set
+    override public func focus() throws {
         self.isFocused = true
-        return true
-    }
-    
-    /// Simulates setting the window position
-    /// - Parameter position: The new position
-    /// - Returns: Always returns true for mocks
-    override public func setPosition(_ position: CGPoint) -> Bool {
-        self.frame.origin = position
-        return true
-    }
-    
-    /// Simulates setting the window size
-    /// - Parameter size: The new size
-    /// - Returns: Always returns true for mocks
-    override public func setSize(_ size: CGSize) -> Bool {
-        self.frame.size = size
-        return true
     }
 }
 
@@ -67,7 +60,8 @@ public class MockElement: Element {
     
     /// Gets mock attributes
     /// - Returns: A dictionary with mock attributes
-    override public func getAttributes() -> [String: Any] {
+    /// - Throws: UIElementError if attributes cannot be retrieved
+    override public func getAttributes() throws -> [String: Any] {
         return [
             "role": self.role,
             "title": self.title,
@@ -78,14 +72,23 @@ public class MockElement: Element {
     
     /// Simulates performing an action on the element
     /// - Parameter action: The name of the action to perform
-    /// - Returns: True if the action is "press", false otherwise
-    override public func performAction(_ action: String) -> Bool {
-        return action == "press"
+    /// - Throws: UIElementError if the action cannot be performed
+    override public func performAction(_ action: String) throws {
+        if action != "press" {
+            throw UIElementError.elementDoesNotSupportAction(description: "Element with title '\(title)'", action: action)
+        }
     }
     
     /// Gets available actions for this element
     /// - Returns: Array of action names
-    override public func getAvailableActions() -> [String] {
+    /// - Throws: UIElementError if actions cannot be retrieved
+    override public func getAvailableActions() throws -> [String] {
+        return ["press"]
+    }
+    
+    /// Safe version of getAvailableActions that doesn't throw
+    /// - Returns: Array of action names
+    override public func getAvailableActionsNoThrow() -> [String] {
         return ["press"]
     }
 }
@@ -102,15 +105,21 @@ public class MockButtonElement: MockElement {
     }
     
     /// Simulates pressing the button
-    /// - Returns: Always returns true for mocks
-    public func press() -> Bool {
+    /// - Throws: UIElementError if the button cannot be pressed
+    public func press() throws {
         self.wasPressed = true
-        return true
     }
     
     /// Gets available actions for this button
     /// - Returns: Array of action names
-    public override func getAvailableActions() -> [String] {
+    /// - Throws: UIElementError if actions cannot be retrieved
+    public override func getAvailableActions() throws -> [String] {
+        return ["press"]
+    }
+    
+    /// Safe version of getAvailableActions that doesn't throw
+    /// - Returns: Array of action names
+    public override func getAvailableActionsNoThrow() -> [String] {
         return ["press"]
     }
 }
@@ -131,23 +140,31 @@ public class MockTextFieldElement: MockElement {
     
     /// Gets the current value of the text field
     /// - Returns: The current text value
-    public func getValue() -> String {
+    /// - Throws: UIElementError if the value cannot be retrieved
+    public func getValue() throws -> String {
         return self.value
     }
     
     /// Sets the value of the text field
     /// - Parameter newValue: The new text value
-    /// - Returns: Always returns true for mocks
-    public func setValue(_ newValue: String) -> Bool {
+    /// - Throws: UIElementError if the value cannot be set
+    public func setValue(_ newValue: String) throws {
         self.value = newValue
-        return true
     }
     
     /// Gets available actions for this text field
     /// - Returns: Array of action names
-    public override func getAvailableActions() -> [String] {
+    /// - Throws: UIElementError if actions cannot be retrieved
+    public override func getAvailableActions() throws -> [String] {
+        return ["getValue", "setValue"]
+    }
+    
+    /// Safe version of getAvailableActions that doesn't throw
+    /// - Returns: Array of action names
+    public override func getAvailableActionsNoThrow() -> [String] {
         return ["getValue", "setValue"]
     }
 }
 
-// Using the real KeyboardInput class from KeyboardInput.swift instead of a mock version
+// For our testing purposes, we'll just rely on the actual implementations
+// and use the mocks for Window and Element classes only

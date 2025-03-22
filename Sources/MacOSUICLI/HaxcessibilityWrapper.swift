@@ -21,7 +21,20 @@ public class SystemAccessibility {
     /// Gets the currently focused application
     /// - Returns: The focused HAXApplication or nil if none
     public static func getFocusedApplication() -> HAXApplication? {
-        return HAXSystem().focusedApplication
+        // First try using HAXSystem's focusedApplication
+        if let focusedApp = HAXSystem().focusedApplication {
+            return focusedApp
+        }
+        
+        // Fallback to NSWorkspace's frontmostApplication
+        if let frontApp = NSWorkspace.shared.frontmostApplication {
+            let pid = frontApp.processIdentifier
+            if pid > 0 {
+                return HAXApplication(pid: pid)
+            }
+        }
+        
+        return nil
     }
     
     /// Gets an application by its process ID
@@ -48,8 +61,19 @@ public class SystemAccessibility {
     /// Gets all accessible applications
     /// - Returns: An array of HAXApplication instances
     public static func getAllApplications() -> [HAXApplication] {
-        // Note: Haxcessibility doesn't provide a direct method to get all
-        // applications, so this is a placeholder for future implementation
-        return []
+        // Use NSWorkspace to get all running applications
+        let workspace = NSWorkspace.shared
+        let runningApps = workspace.runningApplications
+        
+        // Convert to HAXApplication instances
+        var haxApps: [HAXApplication] = []
+        for app in runningApps {
+            let pid = app.processIdentifier
+            if pid > 0, let haxApp = HAXApplication(pid: pid) {
+                haxApps.append(haxApp)
+            }
+        }
+        
+        return haxApps
     }
 }

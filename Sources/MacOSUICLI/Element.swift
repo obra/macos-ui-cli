@@ -76,19 +76,26 @@ public class Element {
     
     /// Gets the attributes of the element
     /// - Returns: A dictionary of attribute names and values
-    public func getAttributes() -> [String: Any] {
+    /// - Throws: UIElementError if attributes cannot be retrieved
+    public func getAttributes() throws -> [String: Any] {
         var attributes: [String: Any] = [:]
         
-        if let haxElement = self.haxElement,
-           let attributeNames = haxElement.attributeNames {
-            for name in attributeNames {
-                do {
-                    let value = try haxElement.getAttributeValue(forKey: name)
-                    attributes[name] = value
-                } catch {
-                    // Skip attributes that can't be accessed
-                    continue
-                }
+        guard let haxElement = self.haxElement else {
+            throw UIElementError.invalidElementState(description: "Element with title '\(title)'", state: "No underlying accessibility element")
+        }
+        
+        guard let attributeNames = haxElement.attributeNames else {
+            throw UIElementError.invalidElementState(description: "Element with title '\(title)'", state: "Cannot retrieve attribute names")
+        }
+        
+        for name in attributeNames {
+            do {
+                let value = try haxElement.getAttributeValue(forKey: name)
+                attributes[name] = value
+            } catch {
+                // Log the error but continue with other attributes
+                DebugLogger.shared.logWarning("Failed to get attribute '\(name)' for element '\(title)': \(error.localizedDescription)")
+                continue
             }
         }
         
@@ -97,17 +104,28 @@ public class Element {
     
     /// Performs an action on the element (e.g., press a button)
     /// - Parameter action: The name of the action to perform
-    /// - Returns: Whether the action was successful
-    public func performAction(_ action: String) -> Bool {
+    /// - Throws: UIElementError if the action cannot be performed
+    public func performAction(_ action: String) throws {
         guard let haxElement = self.haxElement else {
-            return false
+            throw UIElementError.invalidElementState(description: "Element with title '\(title)'", state: "No underlying accessibility element")
+        }
+        
+        // First check if the element supports this action
+        let availableActions = getAvailableActionsNoThrow()
+        if !availableActions.contains(action) {
+            throw UIElementError.elementDoesNotSupportAction(description: "Element with title '\(title)' and role '\(role)'", action: action)
         }
         
         do {
-            try haxElement.performAction(action)
-            return true
+            try withTimeout(5.0) {
+                try haxElement.performAction(action)
+            }
+        } catch let error as OperationError {
+            // Rethrow timeout errors
+            throw error
         } catch {
-            return false
+            // Convert other errors to UIElementError
+            throw UIElementError.invalidElementState(description: "Element with title '\(title)'", state: "Failed to perform action '\(action)': \(error.localizedDescription)")
         }
     }
     
@@ -116,7 +134,8 @@ public class Element {
     ///   - role: The role to match
     ///   - title: The title to match
     /// - Returns: An array of matching elements
-    public func findDescendants(byRole role: String? = nil, byTitle title: String? = nil) -> [Element] {
+    /// - Throws: UIElementError if there's an issue accessing elements
+    public func findDescendants(byRole role: String? = nil, byTitle title: String? = nil) throws -> [Element] {
         var results: [Element] = []
         
         // Check if this element matches
@@ -134,49 +153,104 @@ public class Element {
             results.append(self)
         }
         
-        // Recursively check children
-        for child in children {
-            results.append(contentsOf: child.findDescendants(byRole: role, byTitle: title))
+        // Use timeout in case the tree is very large
+        try withTimeout(10.0) {
+            // Recursively check children
+            for child in self.children {
+                do {
+                    let childResults = try child.findDescendants(byRole: role, byTitle: title)
+                    results.append(contentsOf: childResults)
+                } catch {
+                    // Log the error but continue with other children
+                    DebugLogger.shared.logWarning("Error searching child element: \(error.localizedDescription)")
+                }
+            }
         }
         
         return results
     }
     
+    /// Safe version of findDescendants that doesn't throw
+    /// - Parameters:
+    ///   - role: The role to match
+    ///   - title: The title to match
+    /// - Returns: An array of matching elements, empty array if there was an error
+    public func findDescendantsNoThrow(byRole role: String? = nil, byTitle title: String? = nil) -> [Element] {
+        do {
+            return try findDescendants(byRole: role, byTitle: title)
+        } catch {
+            DebugLogger.shared.logError(error)
+            return []
+        }
+    }
+    
     /// Sets focus to this element
-    /// - Returns: True if successful, false otherwise
-    public func focus() -> Bool {
+    /// - Throws: UIElementError if focus cannot be set
+    public func focus() throws {
         guard let haxElement = self.haxElement else {
-            return false
+            throw UIElementError.invalidElementState(description: "Element with title '\(title)'", state: "No underlying accessibility element")
         }
         
         // Try to set the AXFocused attribute to true
         do {
-            try haxElement.setAttributeValue(true as CFTypeRef, forKey: "AXFocused")
+            try withRetry(maxAttempts: 3, delay: 0.5) {
+                try haxElement.setAttributeValue(true as CFTypeRef, forKey: "AXFocused")
+            }
             self.isFocused = true
-            return true
+        } catch let error as OperationError {
+            // Rethrow timeout or retry errors
+            throw error
         } catch {
-            return false
+            // Convert other errors to UIElementError
+            throw UIElementError.invalidElementState(description: "Element with title '\(title)'", state: "Failed to set focus: \(error.localizedDescription)")
         }
     }
     
     /// Gets available actions for this element
     /// - Returns: Array of action names
-    public func getAvailableActions() -> [String] {
+    /// - Throws: UIElementError if actions cannot be retrieved
+    public func getAvailableActions() throws -> [String] {
         guard let haxElement = self.haxElement else {
-            return []
+            throw UIElementError.invalidElementState(description: "Element with title '\(title)'", state: "No underlying accessibility element")
         }
         
         // Get actions from the accessibility API if available
         do {
             if let actionNames = try haxElement.getAttributeValue(forKey: "AXActions") as? [String] {
-                return actionNames
+                // Always include focus if it's not already there
+                var actions = Set(actionNames)
+                actions.insert("focus")
+                return Array(actions)
             }
         } catch {
-            // Ignore errors and return default actions
+            // Log the error but continue with default actions
+            DebugLogger.shared.logWarning("Failed to get actions for element '\(title)': \(error.localizedDescription)")
         }
         
         // Default actions that most elements support
         return ["focus"]
+    }
+    
+    /// Safe version of getAvailableActions that doesn't throw
+    /// - Returns: Array of action names, empty array if there was an error
+    public func getAvailableActionsNoThrow() -> [String] {
+        do {
+            return try getAvailableActions()
+        } catch {
+            DebugLogger.shared.logError(error)
+            return ["focus"]
+        }
+    }
+    
+    /// Safe version of getAttributes that doesn't throw
+    /// - Returns: Dictionary of attribute names and values, empty dictionary if there was an error
+    public func getAttributesNoThrow() -> [String: Any] {
+        do {
+            return try getAttributes()
+        } catch {
+            DebugLogger.shared.logError(error)
+            return [:]
+        }
     }
 }
 
@@ -188,48 +262,120 @@ public class ElementFinder {
     ///   - role: The role to match
     ///   - title: The title to match
     /// - Returns: An array of matching elements
-    public static func findElements(in container: Element, byRole role: String? = nil, byTitle title: String? = nil) -> [Element] {
-        return container.findDescendants(byRole: role, byTitle: title)
+    /// - Throws: UIElementError if elements cannot be found or accessed
+    public static func findElements(in container: Element, byRole role: String? = nil, byTitle title: String? = nil) throws -> [Element] {
+        return try container.findDescendants(byRole: role, byTitle: title)
+    }
+    
+    /// Safe version of findElements that doesn't throw
+    /// - Parameters:
+    ///   - container: The container element to search within
+    ///   - role: The role to match
+    ///   - title: The title to match
+    /// - Returns: An array of matching elements, empty array if there was an error
+    public static func findElementsNoThrow(in container: Element, byRole role: String? = nil, byTitle title: String? = nil) -> [Element] {
+        do {
+            return try findElements(in: container, byRole: role, byTitle: title)
+        } catch {
+            DebugLogger.shared.logError(error)
+            return []
+        }
     }
     
     /// Gets the currently focused element in the system
-    /// - Returns: The focused element, or nil if none
-    public static func getFocusedElement() -> Element? {
-        let app = ApplicationManager.getFocusedApplication()
-        guard let app = app, let _ = app.getFocusedWindow() else {
-            return nil
+    /// - Returns: The focused element
+    /// - Throws: UIElementError if focused element cannot be determined
+    public static func getFocusedElement() throws -> Element {
+        guard let app = try ApplicationManager.getFocusedApplication() else {
+            throw ApplicationManagerError.applicationNotFound(description: "No focused application")
+        }
+        
+        guard let window = try app.getFocusedWindow() else {
+            throw UIElementError.elementNotFound(description: "Focused window")
         }
         
         // In a real implementation, we would query the accessibility API
         // using HAXElement's focusedElement functionality
-        // For now we'll return a mock element for testing
+        // For now we'll handle the mock implementation
+        #if DEBUG
+        // For testing we'll return a mock element
         let element = Element(role: "textField", title: "Focused Element")
         element.isFocused = true
         return element
+        #else
+        // Try to find the focused element using the API
+        guard let haxElement = window.getHaxElement() else {
+            throw UIElementError.invalidElementState(description: "Window with title '\(window.title)'", state: "No underlying accessibility element")
+        }
+        
+        do {
+            if let focusedElement = try haxElement.getAttributeValue(forKey: "AXFocusedElement") as? HAXElement {
+                let element = Element(haxElement: focusedElement)
+                element.isFocused = true
+                return element
+            } else {
+                throw UIElementError.elementNotFound(description: "Focused element in window '\(window.title)'")
+            }
+        } catch {
+            throw UIElementError.invalidElementState(description: "Window with title '\(window.title)'", state: "Failed to get focused element: \(error.localizedDescription)")
+        }
+        #endif
+    }
+    
+    /// Safe version of getFocusedElement that doesn't throw
+    /// - Returns: The focused element, or nil if there was an error
+    public static func getFocusedElementNoThrow() -> Element? {
+        do {
+            return try getFocusedElement()
+        } catch {
+            DebugLogger.shared.logError(error)
+            return nil
+        }
     }
     
     /// Finds an element using a path string
     /// - Parameters:
     ///   - path: A path string like "window[Main Window]/button[OK]"
     ///   - container: The container element to start from
-    /// - Returns: The element at the path, or nil if not found
-    public static func findElementByPath(_ path: String, in container: Element) -> Element? {
+    /// - Returns: The element at the path
+    /// - Throws: UIElementError if element cannot be found
+    public static func findElementByPath(_ path: String, in container: Element) throws -> Element {
         let pathComponents = path.split(separator: "/")
         var currentElement = container
         
-        for component in pathComponents {
-            let parts = component.split(separator: "[")
-            guard parts.count == 2 else { return nil }
-            
-            let role = String(parts[0])
-            let title = String(parts[1].dropLast())
-            
-            let matches = currentElement.findDescendants(byRole: role, byTitle: title)
-            guard let match = matches.first else { return nil }
-            
-            currentElement = match
+        try withTimeout(5.0) {
+            for component in pathComponents {
+                let parts = component.split(separator: "[")
+                guard parts.count == 2 else {
+                    throw ValidationError.invalidArgument(name: "path", reason: "Invalid path format at component: \(component)")
+                }
+                
+                let role = String(parts[0])
+                let title = String(parts[1].dropLast())
+                
+                let matches = try currentElement.findDescendants(byRole: role, byTitle: title)
+                guard let match = matches.first else {
+                    throw UIElementError.elementNotFound(description: "\(role) with title '\(title)'")
+                }
+                
+                currentElement = match
+            }
         }
         
         return currentElement
+    }
+    
+    /// Safe version of findElementByPath that doesn't throw
+    /// - Parameters:
+    ///   - path: A path string like "window[Main Window]/button[OK]"
+    ///   - container: The container element to start from
+    /// - Returns: The element at the path, or nil if not found
+    public static func findElementByPathNoThrow(_ path: String, in container: Element) -> Element? {
+        do {
+            return try findElementByPath(path, in: container)
+        } catch {
+            DebugLogger.shared.logError(error)
+            return nil
+        }
     }
 }

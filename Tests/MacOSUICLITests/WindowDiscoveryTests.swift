@@ -7,10 +7,10 @@ import XCTest
 final class WindowDiscoveryTests: XCTestCase {
     func testWindowEnumeration() {
         // Test window enumeration for an application
-        let app = ApplicationManager.getFocusedApplication()
+        let app = ApplicationManager.getFocusedApplicationNoThrow()
         
         if let app = app {
-            let windows = app.getWindows()
+            let windows = app.getWindowsNoThrow()
             // We just verify it returns an array (even if empty)
             XCTAssertNotNil(windows, "Should be able to get windows for an application")
         } else {

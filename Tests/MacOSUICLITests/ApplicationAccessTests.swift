@@ -8,7 +8,7 @@ final class ApplicationAccessTests: XCTestCase {
     func testFocusedApplication() {
         // Since we can't always guarantee there's a focused application in the test environment,
         // we'll modify this test to allow for nil results in testing.
-        let app = ApplicationManager.getFocusedApplication()
+        let app = ApplicationManager.getFocusedApplicationNoThrow()
         // In a real environment, we'd expect a focused app, but in testing we'll be more lenient
         if app == nil {
             print("Note: No focused application detected during test, this is acceptable in test environment")
@@ -23,7 +23,7 @@ final class ApplicationAccessTests: XCTestCase {
     func testApplicationByPID() {
         // This test verifies that we can get application by PID
         let nonExistentPID: Int32 = 999999 // Unlikely to be a valid PID
-        let app = ApplicationManager.getApplicationByPID(nonExistentPID)
+        let app = ApplicationManager.getApplicationByPIDNoThrow(nonExistentPID)
         
         // We expect this to be nil since we're using a non-existent PID
         XCTAssertNil(app, "Application with non-existent PID should return nil")
@@ -32,7 +32,7 @@ final class ApplicationAccessTests: XCTestCase {
     func testApplicationByName() {
         // This test verifies that we can get application by name
         let nonExistentName = "NonExistentApplicationName"
-        let app = ApplicationManager.getApplicationByName(nonExistentName)
+        let app = ApplicationManager.getApplicationByNameNoThrow(nonExistentName)
         
         // We expect this to be nil since we're using a non-existent name
         XCTAssertNil(app, "Application with non-existent name should return nil")
