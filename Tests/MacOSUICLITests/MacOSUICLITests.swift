@@ -4,6 +4,7 @@
 import XCTest
 import ArgumentParser
 @testable import MacOSUICLI
+@testable import Haxcessibility
 
 final class MacOSUICLITests: XCTestCase {
     func testVersionFlag() throws {
@@ -11,7 +12,18 @@ final class MacOSUICLITests: XCTestCase {
         XCTAssertEqual(MacOSUICLI.configuration.version, "0.1.0")
     }
     
+    func testHaxcessibilityAvailability() throws {
+        // This test verifies that the Haxcessibility module is available
+        let available = SystemAccessibility.isAvailable()
+        XCTAssertTrue(available, "Haxcessibility should be available")
+        
+        // Verify that we can create a HAXSystem object
+        let system = HAXSystem()
+        XCTAssertNotNil(system, "Should be able to create a HAXSystem instance")
+    }
+    
     static var allTests = [
-        ("testVersionFlag", testVersionFlag)
+        ("testVersionFlag", testVersionFlag),
+        ("testHaxcessibilityAvailability", testHaxcessibilityAvailability)
     ]
 }
