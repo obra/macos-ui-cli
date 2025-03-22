@@ -16,13 +16,14 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.0.0")
     ],
     targets: [
-        // Haxcessibility target, built directly from our source
+        // Haxcessibility wrapper target
         .target(
             name: "Haxcessibility",
             dependencies: [],
+            path: "vendor/Haxcessibility",
             exclude: [
                 "Haxcessibility.xcodeproj",
-                "TODO.mdown",
+                "TODO.mdown", 
                 "README.mdown",
                 "LICENSE",
                 "Resources"
