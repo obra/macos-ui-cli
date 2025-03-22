@@ -32,7 +32,7 @@ public class MockWindow: Window {
     
     /// Simulates focusing the window
     /// - Returns: Always returns true for mocks
-    public func focus() -> Bool {
+    override public func focus() -> Bool {
         self.isFocused = true
         return true
     }
@@ -40,7 +40,7 @@ public class MockWindow: Window {
     /// Simulates setting the window position
     /// - Parameter position: The new position
     /// - Returns: Always returns true for mocks
-    public func setPosition(_ position: CGPoint) -> Bool {
+    override public func setPosition(_ position: CGPoint) -> Bool {
         self.frame.origin = position
         return true
     }
@@ -48,7 +48,7 @@ public class MockWindow: Window {
     /// Simulates setting the window size
     /// - Parameter size: The new size
     /// - Returns: Always returns true for mocks
-    public func setSize(_ size: CGSize) -> Bool {
+    override public func setSize(_ size: CGSize) -> Bool {
         self.frame.size = size
         return true
     }
@@ -85,7 +85,7 @@ public class MockElement: Element {
     
     /// Gets available actions for this element
     /// - Returns: Array of action names
-    public func getAvailableActions() -> [String] {
+    override public func getAvailableActions() -> [String] {
         return ["press"]
     }
 }
@@ -110,7 +110,7 @@ public class MockButtonElement: MockElement {
     
     /// Gets available actions for this button
     /// - Returns: Array of action names
-    override public func getAvailableActions() -> [String] {
+    public override func getAvailableActions() -> [String] {
         return ["press"]
     }
 }
@@ -145,34 +145,9 @@ public class MockTextFieldElement: MockElement {
     
     /// Gets available actions for this text field
     /// - Returns: Array of action names
-    override public func getAvailableActions() -> [String] {
+    public override func getAvailableActions() -> [String] {
         return ["getValue", "setValue"]
     }
 }
 
-/// Utility for simulating keyboard input
-public class KeyboardInput {
-    /// The available modifier keys
-    public enum Modifier {
-        case command
-        case option
-        case control
-        case shift
-    }
-    
-    /// Simulates typing a string
-    /// - Parameter string: The string to type
-    /// - Returns: Always returns true in mock implementation
-    public static func typeString(_ string: String) -> Bool {
-        return true
-    }
-    
-    /// Simulates pressing a key combination
-    /// - Parameters:
-    ///   - modifiers: Array of modifier keys to press
-    ///   - key: The main key to press
-    /// - Returns: Always returns true in mock implementation
-    public static func pressKeyCombination(_ modifiers: [Modifier], key: String) -> Bool {
-        return true
-    }
-}
+// Using the real KeyboardInput class from KeyboardInput.swift instead of a mock version

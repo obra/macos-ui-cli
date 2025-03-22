@@ -2,14 +2,11 @@
 // ABOUTME: It enables traversal and interaction with UI elements.
 
 import Foundation
-
-#if HAXCESSIBILITY_AVAILABLE
 import Haxcessibility
-#endif
 
 /// Represents a UI element from a macOS application
 public class Element {
-    private var haxElement: Any? = nil
+    private var haxElement: HAXElement? = nil
     
     /// The role of the element (e.g., button, text field)
     public var role: String = ""
@@ -34,27 +31,22 @@ public class Element {
     
     /// Creates an Element instance from a HAXElement instance
     /// - Parameter haxElement: The HAXElement instance
-    init(haxElement: Any?) {
-        #if HAXCESSIBILITY_AVAILABLE
-        if let haxElement = haxElement as? HAXElement {
-            self.haxElement = haxElement
-            self.role = haxElement.role ?? "unknown"
-            self.title = haxElement.title ?? ""
-            self.hasChildren = haxElement.hasChildren
-            self.pid = haxElement.processIdentifier
-            
-            // Load children
-            if let haxChildren = haxElement.children {
-                for haxChild in haxChildren {
-                    let child = Element(haxElement: haxChild)
-                    child.parent = self
-                    self.children.append(child)
-                }
+    init(haxElement: HAXElement?) {
+        self.haxElement = haxElement
+        self.role = haxElement?.role ?? "unknown"
+        self.title = haxElement?.title ?? ""
+        self.hasChildren = haxElement?.hasChildren ?? false
+        self.pid = haxElement?.processIdentifier ?? 0
+        
+        // Load children
+        if let haxChildren = haxElement?.children {
+            for haxChild in haxChildren {
+                // Since all Haxcessibility objects inherit from HAXElement, we can use them directly
+                let childElement = Element(haxElement: haxChild)
+                childElement.parent = self
+                self.children.append(childElement)
             }
         }
-        #else
-        self.haxElement = nil
-        #endif
     }
     
     /// Creates a mock Element for testing
@@ -66,6 +58,12 @@ public class Element {
         self.role = role
         self.title = title
         self.hasChildren = hasChildren
+    }
+    
+    /// Gets the underlying HAXElement instance
+    /// - Returns: The HAXElement instance, or nil if not available
+    public func getHaxElement() -> HAXElement? {
+        return self.haxElement
     }
     
     /// Adds a child element
@@ -81,16 +79,18 @@ public class Element {
     public func getAttributes() -> [String: Any] {
         var attributes: [String: Any] = [:]
         
-        #if HAXCESSIBILITY_AVAILABLE
-        if let haxElement = self.haxElement as? HAXElement,
+        if let haxElement = self.haxElement,
            let attributeNames = haxElement.attributeNames {
             for name in attributeNames {
-                // In a real implementation, we would get the attribute value
-                // using the accessibility API
-                attributes[name] = "Value for \(name)"
+                do {
+                    let value = try haxElement.getAttributeValue(forKey: name)
+                    attributes[name] = value
+                } catch {
+                    // Skip attributes that can't be accessed
+                    continue
+                }
             }
         }
-        #endif
         
         return attributes
     }
@@ -99,15 +99,16 @@ public class Element {
     /// - Parameter action: The name of the action to perform
     /// - Returns: Whether the action was successful
     public func performAction(_ action: String) -> Bool {
-        #if HAXCESSIBILITY_AVAILABLE
-        if let haxElement = self.haxElement as? HAXElement {
-            if action == "press" && haxElement is HAXButton {
-                (haxElement as? HAXButton)?.press()
-                return true
-            }
+        guard let haxElement = self.haxElement else {
+            return false
         }
-        #endif
-        return false
+        
+        do {
+            try haxElement.performAction(action)
+            return true
+        } catch {
+            return false
+        }
     }
     
     /// Gets all descendant elements that match the given criteria
@@ -140,6 +141,43 @@ public class Element {
         
         return results
     }
+    
+    /// Sets focus to this element
+    /// - Returns: True if successful, false otherwise
+    public func focus() -> Bool {
+        guard let haxElement = self.haxElement else {
+            return false
+        }
+        
+        // Try to set the AXFocused attribute to true
+        do {
+            try haxElement.setAttributeValue(true as CFTypeRef, forKey: "AXFocused")
+            self.isFocused = true
+            return true
+        } catch {
+            return false
+        }
+    }
+    
+    /// Gets available actions for this element
+    /// - Returns: Array of action names
+    public func getAvailableActions() -> [String] {
+        guard let haxElement = self.haxElement else {
+            return []
+        }
+        
+        // Get actions from the accessibility API if available
+        do {
+            if let actionNames = try haxElement.getAttributeValue(forKey: "AXActions") as? [String] {
+                return actionNames
+            }
+        } catch {
+            // Ignore errors and return default actions
+        }
+        
+        // Default actions that most elements support
+        return ["focus"]
+    }
 }
 
 /// Utility class for finding elements across the system
@@ -163,8 +201,8 @@ public class ElementFinder {
         }
         
         // In a real implementation, we would query the accessibility API
-        // to get the focused element
-        // For now, return a mock element
+        // using HAXElement's focusedElement functionality
+        // For now we'll return a mock element for testing
         let element = Element(role: "textField", title: "Focused Element")
         element.isFocused = true
         return element
