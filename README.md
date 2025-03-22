@@ -46,6 +46,10 @@ SUBCOMMANDS:
   apps                    List and find applications
   windows                 List and find windows
   elements                Find, inspect, and interact with UI elements
+  button                  Interact with buttons
+  text                    Read from or write to text fields
+  window                  Manipulate windows (move, resize, focus, etc.)
+  keyboard                Simulate keyboard input
 ```
 
 ## Examples
@@ -145,6 +149,53 @@ Search within a specific application:
 macos-ui-cli elements --app "Calculator" --role button
 ```
 
+### UI Interaction
+
+Press a button in an application:
+```
+macos-ui-cli button --app "Calculator" --title "=" --press
+```
+
+Read text from a text field:
+```
+macos-ui-cli text --app "Notes" --field "Text Area" --read
+```
+
+Write text to a text field:
+```
+macos-ui-cli text --app "Notes" --field "Text Area" --value "Hello, World!"
+```
+
+Manipulate a window (move and resize):
+```
+macos-ui-cli window --app "Calculator" --position "100,100" --size "400,300"
+```
+
+Focus a window:
+```
+macos-ui-cli window --app "Calculator" --focus
+```
+
+Minimize a window:
+```
+macos-ui-cli window --app "Calculator" --minimize
+```
+
+Toggle fullscreen mode:
+```
+macos-ui-cli window --app "Calculator" --fullscreen
+```
+
+Simulate keyboard input:
+```
+macos-ui-cli keyboard --text "Hello, World!"
+```
+
+Simulate key combinations:
+```
+macos-ui-cli keyboard --combo "cmd+c"
+```
+
 ## Development
 
 ### Setting up the Development Environment
@@ -196,13 +247,17 @@ macos-ui-cli permissions --open
 - Element property inspection
 - Element filtering by role or title
 - Path-based element lookup
+- Button pressing and text field interaction
+- Window manipulation (resize, move, focus, minimize, fullscreen)
+- Element action discovery and execution
+- Keyboard input simulation
 
 ### Future Features
-- Button pressing and text field interaction
-- Window manipulation (resize, move)
-- Element action execution (click, type, etc.)
 - Scripting support
 - Recording and replaying UI interactions
+- Advanced element selection strategies
+- Interactive mode
+- Integration with common development workflows
 
 ## License
 
