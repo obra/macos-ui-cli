@@ -1,0 +1,11 @@
+{
+  "": {
+    "swift-dependencies": "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/MacOSUICLI.build/master.swiftdeps"
+  },
+  "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/Sources/MacOSUICLI/main.swift": {
+    "dependencies": "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/MacOSUICLI.build/main.d",
+    "object": "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/MacOSUICLI.build/main.swift.o",
+    "swiftmodule": "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/MacOSUICLI.build/main~partial.swiftmodule",
+    "swift-dependencies": "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/MacOSUICLI.build/main.swiftdeps"
+  }
+}

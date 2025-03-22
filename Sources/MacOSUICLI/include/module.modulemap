@@ -1,0 +1,7 @@
+// ABOUTME: This file configures the module map for importing Objective-C code into Swift.
+// ABOUTME: It maps the Haxcessibility Objective-C headers to a Swift-importable module.
+
+module Haxcessibility {
+    umbrella header "../HaxcessibilityBridge.h"
+    export *
+}

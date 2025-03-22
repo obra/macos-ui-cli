@@ -1,0 +1,4 @@
+module ArgumentParser {
+    header "/Users/jesse/Documents/GitHub/projects/macos-ui-cli/.build/arm64-apple-macosx/debug/ArgumentParser.build/ArgumentParser-Swift.h"
+    requires objc
+}
