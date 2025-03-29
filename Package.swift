@@ -1,4 +1,4 @@
-// swift-tools-version:5.5
+// swift-tools-version:5.7
 // ABOUTME: This file defines the Swift package manifest for the MacOSUICLI tool.
 // ABOUTME: It configures dependencies, targets, and build settings for the project.
 
@@ -7,13 +7,17 @@ import PackageDescription
 let package = Package(
     name: "MacOSUICLI",
     platforms: [
-        .macOS(.v11)
+        .macOS(.v13)
     ],
     products: [
-        .executable(name: "macos-ui-cli", targets: ["MacOSUICLI"])
+        .executable(name: "macos-ui-cli", targets: ["MacOSUICLI"]),
+        .executable(name: "macos-ui-explorer", targets: ["MacOSUIExplorer"]),
+        .executable(name: "accessibility-explorer", targets: ["AccessibilityExplorer"]),
+        .library(name: "MacOSUICLILib", targets: ["MacOSUICLILib"])
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-argument-parser", from: "1.0.0")
+        .package(url: "https://github.com/apple/swift-argument-parser", from: "1.0.0"),
+        .package(url: "https://github.com/andybest/linenoise-swift", from: "0.0.3")
     ],
     targets: [
         // Haxcessibility wrapper target
@@ -38,11 +42,26 @@ let package = Package(
             ]
         ),
         
+        .target(
+            name: "MacOSUICLILib",
+            dependencies: [
+                "Haxcessibility"
+            ],
+            swiftSettings: [
+                .define("HAXCESSIBILITY_AVAILABLE")
+            ],
+            linkerSettings: [
+                .linkedFramework("AppKit")
+            ]
+        ),
+        
         .executableTarget(
             name: "MacOSUICLI",
             dependencies: [
+                "MacOSUICLILib",
                 "Haxcessibility",
-                .product(name: "ArgumentParser", package: "swift-argument-parser")
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                .product(name: "LineNoise", package: "linenoise-swift")
             ],
             // Info.plist is handled separately for command-line tools
             swiftSettings: [
@@ -58,6 +77,40 @@ let package = Package(
             dependencies: ["MacOSUICLI"],
             swiftSettings: [
                 .define("HAXCESSIBILITY_AVAILABLE")
+            ]
+        ),
+        
+        .executableTarget(
+            name: "MacOSUIExplorer",
+            dependencies: [
+                "MacOSUICLILib",
+                "Haxcessibility",
+                .product(name: "ArgumentParser", package: "swift-argument-parser")
+            ],
+            exclude: [
+                "Info.plist"
+            ],
+            swiftSettings: [
+                .define("HAXCESSIBILITY_AVAILABLE")
+            ],
+            linkerSettings: [
+                .linkedFramework("AppKit"),
+                .linkedFramework("SwiftUI")
+            ]
+        ),
+        
+        .executableTarget(
+            name: "AccessibilityExplorer",
+            dependencies: [
+                "Haxcessibility"
+            ],
+            path: "AccessibilityExplorer",
+            swiftSettings: [
+                .define("HAXCESSIBILITY_AVAILABLE")
+            ],
+            linkerSettings: [
+                .linkedFramework("AppKit"),
+                .linkedFramework("SwiftUI")
             ]
         )
     ]
