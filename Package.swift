@@ -105,6 +105,10 @@ let package = Package(
                 "Haxcessibility"
             ],
             path: "AccessibilityExplorer",
+            exclude: [
+                "README.md",
+                "RUNNING.md"
+            ],
             swiftSettings: [
                 .define("HAXCESSIBILITY_AVAILABLE")
             ],
