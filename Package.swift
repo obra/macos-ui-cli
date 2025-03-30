@@ -12,7 +12,7 @@ let package = Package(
     products: [
         .executable(name: "macos-ui-cli", targets: ["MacOSUICLI"]),
         .executable(name: "macos-ui-explorer", targets: ["MacOSUIExplorer"]),
-        .executable(name: "accessibility-explorer", targets: ["AccessibilityExplorer"]),
+        .executable(name: "AccessibilityExplorer", targets: ["AccessibilityExplorer"]),
         .library(name: "MacOSUICLILib", targets: ["MacOSUICLILib"])
     ],
     dependencies: [
@@ -108,6 +108,8 @@ let package = Package(
             exclude: [
                 "README.md",
                 "RUNNING.md",
+                "UPDATES.md",
+                "Package.swift",
                 "SafeAccessibility.swift",
                 "SafeExplorerApp.swift",
                 "AccessibilityExplorerApp.swift"
