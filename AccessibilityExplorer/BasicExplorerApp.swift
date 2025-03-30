@@ -772,20 +772,8 @@ struct ElementNodeView: View {
                             .frame(width: 12, height: 12)
                     }
                     
-                    // Element icon
-                    Image(systemName: iconForRole(element.role))
-                        .foregroundColor(element.isSelected ? .blue : .primary)
-                    
-                    // Element name and role
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(element.name)
-                            .fontWeight(element.isSelected ? .bold : .regular)
-                            .foregroundColor(element.isSelected ? .blue : .primary)
-                        
-                        Text(element.role)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                    // Visualized element representation
+                    elementVisualization
                 }
             }
             .buttonStyle(PlainButtonStyle())
@@ -812,6 +800,452 @@ struct ElementNodeView: View {
         }
     }
     
+    /// Element visualization based on its role
+    @ViewBuilder
+    private var elementVisualization: some View {
+        switch element.role {
+        case "Button":
+            buttonVisualization
+        case "TextField", "SearchField":
+            textFieldVisualization
+        case "CheckBox", "CheckBoxButton":
+            checkboxVisualization
+        case "RadioButton":
+            radioButtonVisualization
+        case "Menu", "MenuItem", "MenuBar":
+            menuVisualization
+        case "TabGroup":
+            tabGroupVisualization
+        case "ScrollArea":
+            scrollAreaVisualization
+        case "Slider", "ValueIndicator":
+            sliderVisualization
+        case "StaticText", "Text":
+            textVisualization
+        case "Image":
+            imageVisualization
+        case "Window":
+            windowVisualization
+        case "Table":
+            tableVisualization
+        default:
+            defaultVisualization
+        }
+    }
+    
+    /// Button visualization
+    private var buttonVisualization: some View {
+        HStack {
+            // Button icon
+            Image(systemName: "button.programmable")
+                .foregroundColor(element.isSelected ? .blue : .primary)
+                .frame(width: 16, height: 16)
+            
+            // Compact button rendering
+            RoundedRectangle(cornerRadius: 4)
+                .fill(element.isSelected ? Color.blue.opacity(0.3) : Color.gray.opacity(0.1))
+                .overlay(
+                    Text(element.name)
+                        .font(.system(size: 12))
+                        .fontWeight(element.isSelected ? .semibold : .regular)
+                        .foregroundColor(element.isSelected ? .blue : .primary)
+                        .lineLimit(1)
+                        .padding(.horizontal, 4)
+                )
+                .frame(height: 20)
+                .frame(minWidth: 60, maxWidth: 120)
+            
+            // Role caption
+            Text("Button")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+    
+    /// Text field visualization
+    private var textFieldVisualization: some View {
+        HStack {
+            // Text field icon
+            Image(systemName: "text.cursor")
+                .foregroundColor(element.isSelected ? .blue : .primary)
+                .frame(width: 16, height: 16)
+            
+            // Text field mock
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(element.isSelected ? Color.blue : Color.gray, lineWidth: 1)
+                .background(Color.white.opacity(0.5))
+                .frame(height: 20)
+                .frame(minWidth: 80, maxWidth: 150)
+                .overlay(
+                    HStack {
+                        Text(element.name)
+                            .font(.system(size: 11))
+                            .foregroundColor(element.isSelected ? .blue : .gray)
+                            .padding(.leading, 4)
+                            .lineLimit(1)
+                        Spacer()
+                    }
+                )
+            
+            // Role caption
+            Text(element.role)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+    
+    /// Checkbox visualization
+    private var checkboxVisualization: some View {
+        HStack {
+            // Checkbox icon
+            Image(systemName: "checkmark.square")
+                .foregroundColor(element.isSelected ? .blue : .primary)
+                .frame(width: 16, height: 16)
+            
+            // Checkbox label
+            Text(element.name)
+                .font(.system(size: 12))
+                .fontWeight(element.isSelected ? .semibold : .regular)
+                .foregroundColor(element.isSelected ? .blue : .primary)
+                .lineLimit(1)
+            
+            // Role caption
+            Text("Checkbox")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+    
+    /// Radio button visualization
+    private var radioButtonVisualization: some View {
+        HStack {
+            // Radio button icon
+            Image(systemName: "circle")
+                .foregroundColor(element.isSelected ? .blue : .primary)
+                .frame(width: 16, height: 16)
+            
+            // Radio button label
+            Text(element.name)
+                .font(.system(size: 12))
+                .fontWeight(element.isSelected ? .semibold : .regular)
+                .foregroundColor(element.isSelected ? .blue : .primary)
+                .lineLimit(1)
+            
+            // Role caption
+            Text("Radio")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+    
+    /// Menu visualization
+    private var menuVisualization: some View {
+        HStack {
+            // Menu icon
+            Image(systemName: "menubar.arrow.down")
+                .foregroundColor(element.isSelected ? .blue : .primary)
+                .frame(width: 16, height: 16)
+            
+            // Menu rendering
+            Text(element.name)
+                .font(.system(size: 12, weight: .medium))
+                .fontWeight(element.isSelected ? .semibold : .regular)
+                .foregroundColor(element.isSelected ? .blue : .primary)
+                .lineLimit(1)
+                .padding(.vertical, 2)
+                .padding(.horizontal, 6)
+                .background(element.isSelected ? Color.blue.opacity(0.1) : Color.clear)
+                .cornerRadius(3)
+            
+            // Role caption
+            Text(element.role)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+    
+    /// Tab group visualization
+    private var tabGroupVisualization: some View {
+        HStack {
+            // Tab icon
+            Image(systemName: "rectangle.stack")
+                .foregroundColor(element.isSelected ? .blue : .primary)
+                .frame(width: 16, height: 16)
+            
+            // Tab visualization
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 1) {
+                    Text(element.name)
+                        .font(.system(size: 11))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(element.isSelected ? Color.blue.opacity(0.2) : Color.gray.opacity(0.1))
+                        .cornerRadius(3)
+                    
+                    if element.children.count > 1 {
+                        Text("+\(element.children.count - 1)")
+                            .font(.system(size: 9))
+                            .padding(.horizontal, 4)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                Rectangle()
+                    .fill(element.isSelected ? Color.blue.opacity(0.2) : Color.gray.opacity(0.1))
+                    .frame(height: 4)
+                    .cornerRadius(1)
+            }
+            
+            // Role caption
+            Text("Tabs")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+    
+    /// Scroll area visualization
+    private var scrollAreaVisualization: some View {
+        HStack {
+            // Scroll icon
+            Image(systemName: "scroll")
+                .foregroundColor(element.isSelected ? .blue : .primary)
+                .frame(width: 16, height: 16)
+            
+            // Scroll area visualization 
+            VStack(alignment: .leading, spacing: 0) {
+                Text(element.name)
+                    .font(.system(size: 12))
+                    .fontWeight(element.isSelected ? .semibold : .regular)
+                    .foregroundColor(element.isSelected ? .blue : .primary)
+                    .lineLimit(1)
+                
+                Rectangle()
+                    .fill(element.isSelected ? Color.blue.opacity(0.3) : Color.gray.opacity(0.1))
+                    .frame(width: 80, height: 20)
+                    .overlay(
+                        HStack {
+                            Spacer()
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 4, height: 16)
+                                .cornerRadius(2)
+                                .padding(.trailing, 2)
+                        }
+                    )
+                    .cornerRadius(3)
+            }
+            
+            // Role caption
+            Text("ScrollArea")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+    
+    /// Slider visualization
+    private var sliderVisualization: some View {
+        HStack {
+            // Slider icon
+            Image(systemName: "slider.horizontal.3")
+                .foregroundColor(element.isSelected ? .blue : .primary)
+                .frame(width: 16, height: 16)
+            
+            // Slider visualization
+            Rectangle()
+                .fill(Color.gray.opacity(0.2))
+                .frame(width: 80, height: 4)
+                .overlay(
+                    Circle()
+                        .fill(element.isSelected ? Color.blue : Color.gray)
+                        .frame(width: 10, height: 10)
+                        .offset(x: 20, y: 0)
+                )
+                .cornerRadius(2)
+            
+            // Name and role
+            VStack(alignment: .leading, spacing: 0) {
+                Text(element.name)
+                    .font(.system(size: 12))
+                    .fontWeight(element.isSelected ? .semibold : .regular)
+                    .foregroundColor(element.isSelected ? .blue : .primary)
+                
+                Text("Slider")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+    
+    /// Text visualization
+    private var textVisualization: some View {
+        HStack {
+            // Text icon
+            Image(systemName: "text.quote")
+                .foregroundColor(element.isSelected ? .blue : .primary)
+                .frame(width: 16, height: 16)
+            
+            // Text visualization
+            Text(element.name.isEmpty ? "Text" : element.name)
+                .font(.system(size: 12))
+                .fontWeight(element.isSelected ? .semibold : .regular)
+                .foregroundColor(element.isSelected ? .blue : .primary)
+                .lineLimit(1)
+            
+            // Role caption
+            Text("Text")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+    
+    /// Image visualization
+    private var imageVisualization: some View {
+        HStack {
+            // Image icon
+            Image(systemName: "photo")
+                .foregroundColor(element.isSelected ? .blue : .primary)
+                .frame(width: 16, height: 16)
+            
+            // Image placeholder
+            RoundedRectangle(cornerRadius: 3)
+                .fill(element.isSelected ? Color.blue.opacity(0.1) : Color.gray.opacity(0.1))
+                .frame(width: 24, height: 24)
+                .overlay(
+                    Image(systemName: "photo")
+                        .font(.system(size: 12))
+                        .foregroundColor(element.isSelected ? Color.blue.opacity(0.5) : Color.gray.opacity(0.5))
+                )
+            
+            // Name and role
+            VStack(alignment: .leading, spacing: 0) {
+                Text(element.name)
+                    .font(.system(size: 12))
+                    .fontWeight(element.isSelected ? .semibold : .regular)
+                    .foregroundColor(element.isSelected ? .blue : .primary)
+                
+                Text("Image")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+    
+    /// Window visualization
+    private var windowVisualization: some View {
+        HStack {
+            // Window icon
+            Image(systemName: "macwindow")
+                .foregroundColor(element.isSelected ? .blue : .primary)
+                .frame(width: 16, height: 16)
+            
+            // Window visualization
+            VStack(alignment: .leading, spacing: 2) {
+                // Window header
+                HStack(spacing: 2) {
+                    Circle()
+                        .fill(Color.red.opacity(0.7))
+                        .frame(width: 6, height: 6)
+                    Circle()
+                        .fill(Color.yellow.opacity(0.7))
+                        .frame(width: 6, height: 6)
+                    Circle()
+                        .fill(Color.green.opacity(0.7))
+                        .frame(width: 6, height: 6)
+                    
+                    Text(element.name)
+                        .font(.system(size: 10))
+                        .fontWeight(element.isSelected ? .semibold : .regular)
+                        .foregroundColor(element.isSelected ? .blue : .primary)
+                        .lineLimit(1)
+                        .frame(maxWidth: 80)
+                }
+                
+                // Window content
+                Rectangle()
+                    .fill(element.isSelected ? Color.blue.opacity(0.1) : Color.gray.opacity(0.05))
+                    .frame(width: 100, height: 16)
+                    .cornerRadius(2)
+            }
+            .padding(2)
+            .background(Color.gray.opacity(0.1))
+            .cornerRadius(4)
+            
+            // Role caption
+            Text("Window")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+    
+    /// Table visualization
+    private var tableVisualization: some View {
+        HStack {
+            // Table icon
+            Image(systemName: "tablecells")
+                .foregroundColor(element.isSelected ? .blue : .primary)
+                .frame(width: 16, height: 16)
+            
+            // Table visualization
+            VStack(spacing: 1) {
+                // Header row
+                HStack(spacing: 1) {
+                    Rectangle()
+                        .fill(element.isSelected ? Color.blue.opacity(0.2) : Color.gray.opacity(0.2))
+                        .frame(width: 30, height: 8)
+                    Rectangle()
+                        .fill(element.isSelected ? Color.blue.opacity(0.2) : Color.gray.opacity(0.2))
+                        .frame(width: 30, height: 8)
+                }
+                
+                // Data rows
+                ForEach(0..<2) { _ in
+                    HStack(spacing: 1) {
+                        Rectangle()
+                            .fill(element.isSelected ? Color.blue.opacity(0.1) : Color.gray.opacity(0.1))
+                            .frame(width: 30, height: 5)
+                        Rectangle()
+                            .fill(element.isSelected ? Color.blue.opacity(0.1) : Color.gray.opacity(0.1))
+                            .frame(width: 30, height: 5)
+                    }
+                }
+            }
+            .cornerRadius(2)
+            
+            // Name and role
+            VStack(alignment: .leading, spacing: 0) {
+                Text(element.name)
+                    .font(.system(size: 12))
+                    .fontWeight(element.isSelected ? .semibold : .regular)
+                    .foregroundColor(element.isSelected ? .blue : .primary)
+                
+                Text("Table")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+    
+    /// Default visualization for other element types
+    private var defaultVisualization: some View {
+        HStack {
+            // Element icon
+            Image(systemName: iconForRole(element.role))
+                .foregroundColor(element.isSelected ? .blue : .primary)
+                .frame(width: 16, height: 16)
+            
+            // Element name and role
+            VStack(alignment: .leading, spacing: 2) {
+                Text(element.name)
+                    .font(.system(size: 12))
+                    .fontWeight(element.isSelected ? .bold : .regular)
+                    .foregroundColor(element.isSelected ? .blue : .primary)
+                
+                Text(element.role)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+    
     private func iconForRole(_ role: String) -> String {
         switch role {
         case "Application": return "app.badge"
@@ -826,9 +1260,15 @@ struct ElementNodeView: View {
         case "Table": return "tablecells"
         case "WebArea": return "globe"
         case "ScrollArea": return "scroll"
+        case "Slider": return "slider.horizontal.3"
+        case "CheckBox": return "checkmark.square"
+        case "RadioButton": return "circle"
+        case "Image": return "photo"
+        case "TabGroup": return "rectangle.stack"
         default: return "circle"
         }
     }
+}
 }
 
 /// Properties display view
