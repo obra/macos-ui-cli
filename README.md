@@ -96,6 +96,7 @@ SUBCOMMANDS:
     version               Show detailed version information
     info                  Display system information
     format                Configure output formatting
+    interactive           Start interactive shell mode with tab completion
     
   # Original commands for backward compatibility
   permissions             Check and request accessibility permissions
@@ -257,6 +258,83 @@ Simulate keyboard input:
 Simulate key combinations:
 ```
 /Applications/macos-ui-cli.app/Contents/MacOS/macos-ui-cli keyboard --combo "cmd+c"
+```
+
+### Interactive Shell Mode
+
+Start the interactive shell with tab completion:
+```
+/Applications/macos-ui-cli.app/Contents/MacOS/macos-ui-cli util interactive
+```
+
+The interactive mode provides a REPL (Read-Eval-Print Loop) with:
+- Command history
+- Tab completion for commands and UI elements
+- Context-aware navigation of the UI hierarchy
+- Helpful command hints
+
+#### Interactive Mode Commands
+
+- `help` - Show available commands
+- `exit` or `quit` - Exit interactive mode
+- `apps` - List all applications
+- `app <name>` - Set current application by name
+- `windows` - List windows of current application
+- `window <title>` - Set current window by title
+- `elements` - List elements in current window
+- `element <path>` - Select element by path
+- `find <role> [title]` - Find elements by role and/or title
+- `click` - Click on the current element
+- `type <text>` - Type text into the current element
+- `info` - Show information about the current context
+- `tree` - Show element hierarchy as a tree
+- `back` - Go back one level in the context hierarchy
+- `clear` - Clear the screen
+
+#### Interactive Mode Example Session
+
+```
+$ /Applications/macos-ui-cli.app/Contents/MacOS/macos-ui-cli util interactive
+Starting interactive mode...
+Type 'help' for available commands, 'exit' to quit
+
+(macos-ui-cli)> apps
+Available Applications:
+- Calculator (PID: 1234)
+- Safari (PID: 5678)
+- Notes (PID: 9012)
+
+(macos-ui-cli)> app Calculator
+Current application set to: Calculator
+Current window set to: Calculator
+
+(macos-ui-cli) [Calculator/Calculator]> elements
+Elements in Calculator:
+- button[1] (role: button)
+- button[2] (role: button)
+- button[+] (role: button)
+- button[=] (role: button)
+
+(macos-ui-cli) [Calculator/Calculator]> find button =
+Elements with role 'button' and title '=':
+- button[=] (role: button)
+Element automatically selected
+
+(macos-ui-cli) [Calculator/Calculator/button[=]]> click
+Clicking on element: button[=]
+Button clicked successfully
+
+(macos-ui-cli) [Calculator/Calculator/button[=]]> back
+Context set to window level
+
+(macos-ui-cli) [Calculator/Calculator]> back
+Context set to application level
+
+(macos-ui-cli) [Calculator]> back
+Context cleared
+
+(macos-ui-cli)> exit
+Exiting interactive mode
 ```
 
 ## Development
@@ -467,12 +545,12 @@ macos-ui-cli script --execute "
 - Adjustable verbosity levels
 - Colorized output
 - Element hierarchy visualization
+- Interactive mode with tab completion and command history
 
 ### Future Features
 - Scripting support
 - Recording and replaying UI interactions
 - Advanced element selection strategies
-- Interactive mode
 - Integration with common development workflows
 
 ## License
