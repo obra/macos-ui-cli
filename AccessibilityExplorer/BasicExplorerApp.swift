@@ -4,6 +4,10 @@
 import SwiftUI
 import AppKit
 
+// AX action constants not exposed in AppKit
+let kAXMinimizeAction = "AXMinimize"
+let kAXCloseAction = "AXClose"
+
 /// Simple model for an application
 struct AppInfo: Identifiable, Hashable {
     let id = UUID()
@@ -66,59 +70,37 @@ class UIElement: Identifiable, ObservableObject {
     }
 }
 
-/// Safety-focused accessibility data provider
-class SafeAccessibility {
-    static let shared = SafeAccessibility()
+// SafeAccessibility class is now defined in SafeAccessibility.swift
+
+/// Main view model for the app
+class ExplorerViewModel: ObservableObject {
+    @Published var applications: [AppInfo] = []
+    @Published var selectedApp: AppInfo? = nil
+    @Published var rootElement: UIElement? = nil
+    @Published var selectedElement: UIElement? = nil
+    @Published var properties: [String: String] = [:]
     
-    var useMockData = true {
+    @Published var useMockData = false {
         didSet {
-            print("Changed to \(useMockData ? "mock" : "real") data mode")
-        }
-    }
-    
-    var isLoading = false
-    
-    private init() {}
-    
-    /// Check whether accessibility is authorized
-    func checkAccessibilityPermissions() -> Bool {
-        let checkOptions = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as String: true]
-        return AXIsProcessTrustedWithOptions(checkOptions as CFDictionary)
-    }
-    
-    /// Get a list of running applications
-    func getApplications(completion: @escaping ([AppInfo]) -> Void) {
-        if useMockData {
-            completion([
-                AppInfo(name: "Safari", bundleID: "com.apple.Safari", pid: 1001, icon: "safari"),
-                AppInfo(name: "TextEdit", bundleID: "com.apple.TextEdit", pid: 1002, icon: "doc.text"),
-                AppInfo(name: "Finder", bundleID: "com.apple.finder", pid: 1003, icon: "folder"),
-                AppInfo(name: "Mail", bundleID: "com.apple.mail", pid: 1004, icon: "envelope"),
-                AppInfo(name: "Photos", bundleID: "com.apple.Photos", pid: 1005, icon: "photo")
-            ])
-            return
-        }
-        
-        // Use a timeout to prevent freezing
-        let timeoutQueue = DispatchQueue(label: "com.timeout.queue")
-        var hasCompleted = false
-        
-        // Set a timeout
-        timeoutQueue.asyncAfter(deadline: .now() + 1.0) {
-            if !hasCompleted {
-                hasCompleted = true
-                print("Timeout getting applications")
-                // Return mock data on timeout
-                completion([
-                    AppInfo(name: "Safari", bundleID: "com.apple.Safari", pid: 1001, icon: "safari"),
-                    AppInfo(name: "TextEdit", bundleID: "com.apple.TextEdit", pid: 1002, icon: "doc.text"),
-                    AppInfo(name: "Finder", bundleID: "com.apple.finder", pid: 1003, icon: "folder")
-                ])
+            if selectedApp != nil {
+                refreshElementTree()
             }
         }
+    }
+    
+    @Published var isLoading = false
+    @Published var lastErrorMessage: String? = nil
+    
+    init() {
+        useMockData = false // Always use real accessibility API
+        loadApplications()
+    }
+    
+    func loadApplications() {
+        isLoading = true
         
-        // Get real applications
-        DispatchQueue.global(qos: .userInitiated).async {
+        // Load applications using the Workspace API
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             var apps: [AppInfo] = []
             let workspace = NSWorkspace.shared
             let runningApps = workspace.runningApplications
@@ -137,60 +119,29 @@ class SafeAccessibility {
                 }
             }
             
-            if !hasCompleted {
-                hasCompleted = true
-                completion(apps)
+            DispatchQueue.main.async {
+                self?.applications = apps
+                self?.isLoading = false
             }
         }
     }
     
-    /// Get UI elements for an application
-    func getUIElements(for app: AppInfo, completion: @escaping (UIElement?) -> Void) {
-        if useMockData {
-            let rootElement = UIElement(name: app.name, role: "Application", appInfo: app, description: "Application process")
-            
-            // Add main window
-            let mainWindow = UIElement(name: "Main Window", role: "Window", appInfo: app, description: "Main application window", parent: rootElement)
-            rootElement.addChild(mainWindow)
-            
-            // Add menu bar
-            let menuBar = UIElement(name: "Menu Bar", role: "MenuBar", appInfo: app, description: "Application menu bar", parent: rootElement)
-            rootElement.addChild(menuBar)
-            
-            // Add window elements
-            let toolbar = UIElement(name: "Toolbar", role: "Toolbar", appInfo: app, description: "Window toolbar", parent: mainWindow)
-            mainWindow.addChild(toolbar)
-            
-            let content = UIElement(name: "Content", role: "Group", appInfo: app, description: "Content area", parent: mainWindow)
-            mainWindow.addChild(content)
-            
-            // Add some buttons to toolbar
-            toolbar.addChild(UIElement(name: "Back", role: "Button", appInfo: app, description: "Go back", parent: toolbar))
-            toolbar.addChild(UIElement(name: "Forward", role: "Button", appInfo: app, description: "Go forward", parent: toolbar))
-            toolbar.addChild(UIElement(name: "Reload", role: "Button", appInfo: app, description: "Reload page", parent: toolbar))
-            
-            completion(rootElement)
-            return
-        }
+    func selectApplication(_ app: AppInfo) {
+        self.selectedApp = app
+        self.rootElement = nil
+        self.selectedElement = nil
         
-        // Use a timeout for real access
-        let timeoutQueue = DispatchQueue(label: "com.timeout.queue")
-        var hasCompleted = false
+        refreshElementTree()
+    }
+    
+    func refreshElementTree() {
+        guard let app = selectedApp else { return }
         
-        // Set a timeout for safety
-        timeoutQueue.asyncAfter(deadline: .now() + 1.0) {
-            if !hasCompleted {
-                hasCompleted = true
-                print("Timeout getting UI elements")
-                // Return mock data on timeout
-                let rootElement = UIElement(name: app.name, role: "Application", appInfo: app, description: "Application process")
-                completion(rootElement)
-            }
-        }
+        isLoading = true
         
-        // Try to get real elements
-        DispatchQueue.global(qos: .userInitiated).async {
-            // Create an application accessibility element
+        // Create a new root element for the application
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            // Create an AXUIElement for the application
             let axApp = AXUIElementCreateApplication(app.pid)
             let rootElement = UIElement(name: app.name, role: "Application", appInfo: app, description: "Application process", axElement: axApp)
             
@@ -216,274 +167,15 @@ class SafeAccessibility {
                         axElement: window
                     )
                     rootElement.addChild(windowElement)
-                    
-                    // Get window children (limited to direct children)
-                    var childrenRef: CFTypeRef?
-                    let childrenResult = AXUIElementCopyAttributeValue(window, kAXChildrenAttribute as CFString, &childrenRef)
-                    
-                    if childrenResult == .success, let childrenArray = childrenRef as? [AXUIElement] {
-                        for child in childrenArray.prefix(10) {
-                            var roleRef: CFTypeRef?
-                            AXUIElementCopyAttributeValue(child, kAXRoleAttribute as CFString, &roleRef)
-                            let role = (roleRef as? String) ?? "Unknown"
-                            
-                            var childTitleRef: CFTypeRef?
-                            AXUIElementCopyAttributeValue(child, kAXTitleAttribute as CFString, &childTitleRef)
-                            let childTitle = (childTitleRef as? String) ?? role
-                            
-                            let childElement = UIElement(
-                                name: childTitle,
-                                role: role,
-                                appInfo: app,
-                                description: "\(role) element",
-                                parent: windowElement,
-                                axElement: child
-                            )
-                            windowElement.addChild(childElement)
-                        }
-                    }
                 }
             }
             
-            if !hasCompleted {
-                hasCompleted = true
-                completion(rootElement)
-            }
-        }
-    }
-    
-    /// Get properties for an element
-    func getProperties(for element: UIElement) -> [String: String] {
-        var properties: [String: String] = [
-            "Name": element.name,
-            "Role": element.role,
-            "Description": element.description
-        ]
-        
-        if useMockData {
-            // Add more mock properties based on role
-            switch element.role {
-            case "Application":
-                properties["Process ID"] = "\(element.appInfo.pid)"
-                properties["Bundle ID"] = element.appInfo.bundleID
-                properties["Frontmost"] = "true"
-            case "Window":
-                properties["Position"] = "{x: 0, y: 0}"
-                properties["Size"] = "{width: 800, height: 600}"
-                properties["Main"] = "true"
-                properties["Minimized"] = "false"
-            case "Button":
-                properties["Enabled"] = "true"
-                properties["Position"] = "{x: 20, y: 20}"
-                properties["Size"] = "{width: 80, height: 25}"
-            default:
-                properties["Type"] = element.role
-            }
-            
-            return properties
-        }
-        
-        // Try to get real properties if we have a reference
-        if let axElement = element.axElement {
-            // Get attributes
-            var namesRef: CFArray?
-            if AXUIElementCopyAttributeNames(axElement, &namesRef) == .success,
-               let attributeNames = namesRef as? [String] {
-                
-                // Get a value for each attribute with a timeout safety
-                for name in attributeNames.prefix(20) { // Limit to 20 attributes
-                    var valueRef: CFTypeRef?
-                    if AXUIElementCopyAttributeValue(axElement, name as CFString, &valueRef) == .success {
-                        // Convert different value types to strings
-                        if let stringValue = valueRef as? String {
-                            properties[name] = stringValue
-                        } else if let numberValue = valueRef as? NSNumber {
-                            properties[name] = numberValue.stringValue
-                        } else if let boolValue = valueRef as? Bool {
-                            properties[name] = boolValue ? "true" : "false"
-                        } else if CFGetTypeID(valueRef as CFTypeRef) == AXUIElementGetTypeID() {
-                            properties[name] = "Element"
-                        } else if valueRef == nil {
-                            properties[name] = "nil"
-                        } else {
-                            properties[name] = "Complex Value"
-                        }
-                    }
-                }
-                
-                // Get position and size specifically
-                if element.role == "Window" || element.role == "Button" {
-                    var positionRef: CFTypeRef?
-                    if AXUIElementCopyAttributeValue(axElement, kAXPositionAttribute as CFString, &positionRef) == .success,
-                       let position = positionRef as? NSValue {
-                        var point = NSPoint()
-                        position.getValue(&point)
-                        properties["Position"] = "{x: \(Int(point.x)), y: \(Int(point.y))}"
-                    }
-                    
-                    var sizeRef: CFTypeRef?
-                    if AXUIElementCopyAttributeValue(axElement, kAXSizeAttribute as CFString, &sizeRef) == .success,
-                       let size = sizeRef as? NSValue {
-                        var sizeValue = NSSize()
-                        size.getValue(&sizeValue)
-                        properties["Size"] = "{width: \(Int(sizeValue.width)), height: \(Int(sizeValue.height))}"
-                    }
-                }
-            }
-        }
-        
-        return properties
-    }
-    
-    /// Load children for an element on demand
-    func loadChildren(for element: UIElement, completion: @escaping () -> Void) {
-        if useMockData || element.children.count > 0 {
-            // Children already loaded or using mock data
-            completion()
-            return
-        }
-        
-        guard let axElement = element.axElement else {
-            completion()
-            return
-        }
-        
-        // Use a timeout for safety
-        let timeoutQueue = DispatchQueue(label: "com.timeout.queue")
-        var hasCompleted = false
-        
-        // Set a timeout
-        timeoutQueue.asyncAfter(deadline: .now() + 0.5) {
-            if !hasCompleted {
-                hasCompleted = true
-                print("Timeout loading children")
-                completion()
-            }
-        }
-        
-        // Try to get children
-        DispatchQueue.global(qos: .userInitiated).async {
-            var childrenRef: CFTypeRef?
-            let result = AXUIElementCopyAttributeValue(axElement, kAXChildrenAttribute as CFString, &childrenRef)
-            
-            if result == .success, let childrenArray = childrenRef as? [AXUIElement] {
-                var newChildren: [UIElement] = []
-                
-                // Only get a reasonable number to prevent freezing
-                for child in childrenArray.prefix(20) {
-                    var roleRef: CFTypeRef?
-                    AXUIElementCopyAttributeValue(child, kAXRoleAttribute as CFString, &roleRef)
-                    let role = (roleRef as? String) ?? "Unknown"
-                    
-                    var titleRef: CFTypeRef?
-                    AXUIElementCopyAttributeValue(child, kAXTitleAttribute as CFString, &titleRef)
-                    var name = (titleRef as? String) ?? role
-                    
-                    // Try description if title is empty
-                    if name.isEmpty || name == role {
-                        var descRef: CFTypeRef?
-                        AXUIElementCopyAttributeValue(child, kAXDescriptionAttribute as CFString, &descRef)
-                        if let desc = descRef as? String, !desc.isEmpty {
-                            name = desc
-                        }
-                    }
-                    
-                    // Create child element
-                    let childElement = UIElement(
-                        name: name,
-                        role: role,
-                        appInfo: element.appInfo,
-                        description: "\(role) element",
-                        parent: element,
-                        axElement: child
-                    )
-                    
-                    // Check if it has children (for future use)
-                    var subChildrenRef: CFTypeRef?
-                    _ = AXUIElementCopyAttributeValue(child, kAXChildrenAttribute as CFString, &subChildrenRef)
-                    
-                    // Add to new children list
-                    newChildren.append(childElement)
-                }
-                
-                // Update element on main thread
-                DispatchQueue.main.async {
-                    element.children = newChildren
-                    
-                    if !hasCompleted {
-                        hasCompleted = true
-                        completion()
-                    }
-                }
-            } else {
-                if !hasCompleted {
-                    hasCompleted = true
-                    completion()
-                }
-            }
-        }
-    }
-}
-
-/// Main view model for the app
-class ExplorerViewModel: ObservableObject {
-    @Published var applications: [AppInfo] = []
-    @Published var selectedApp: AppInfo? = nil
-    @Published var rootElement: UIElement? = nil
-    @Published var selectedElement: UIElement? = nil
-    @Published var properties: [String: String] = [:]
-    
-    @Published var useMockData = true {
-        didSet {
-            SafeAccessibility.shared.useMockData = useMockData
-            if selectedApp != nil {
-                refreshElementTree()
-            }
-        }
-    }
-    
-    @Published var isLoading = false
-    
-    private let safeAccessibility = SafeAccessibility.shared
-    
-    init() {
-        useMockData = true
-        loadApplications()
-    }
-    
-    func loadApplications() {
-        isLoading = true
-        
-        safeAccessibility.getApplications { [weak self] apps in
-            DispatchQueue.main.async {
-                self?.applications = apps
-                self?.isLoading = false
-            }
-        }
-    }
-    
-    func selectApplication(_ app: AppInfo) {
-        self.selectedApp = app
-        self.rootElement = nil
-        self.selectedElement = nil
-        
-        refreshElementTree()
-    }
-    
-    func refreshElementTree() {
-        guard let app = selectedApp else { return }
-        
-        isLoading = true
-        
-        safeAccessibility.getUIElements(for: app) { [weak self] rootElement in
             DispatchQueue.main.async {
                 self?.rootElement = rootElement
                 self?.selectedElement = rootElement
                 self?.isLoading = false
                 
-                if let rootElement = rootElement {
-                    self?.loadProperties(for: rootElement)
-                }
+                self?.loadProperties(for: rootElement)
             }
         }
     }
@@ -504,7 +196,7 @@ class ExplorerViewModel: ObservableObject {
         if element.children.isEmpty && !element.isLoading {
             element.isLoading = true
             
-            safeAccessibility.loadChildren(for: element) {
+            loadChildren(for: element) {
                 DispatchQueue.main.async {
                     element.isLoading = false
                     element.isExpanded = true
@@ -520,11 +212,190 @@ class ExplorerViewModel: ObservableObject {
     }
     
     func loadProperties(for element: UIElement) {
-        self.properties = safeAccessibility.getProperties(for: element)
+        // Load properties directly from the AXUIElement
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            var properties: [String: String] = [
+                "Name": element.name,
+                "Role": element.role,
+                "Description": element.description
+            ]
+            
+            // Try to get real properties if we have a reference
+            if let axElement = element.axElement {
+                // Get attributes
+                var namesRef: CFArray?
+                if AXUIElementCopyAttributeNames(axElement, &namesRef) == .success,
+                   let attributeNames = namesRef as? [String] {
+                    
+                    // Get a value for each attribute with a timeout safety
+                    for name in attributeNames.prefix(20) { // Limit to 20 attributes
+                        var valueRef: CFTypeRef?
+                        if AXUIElementCopyAttributeValue(axElement, name as CFString, &valueRef) == .success {
+                            // Convert different value types to strings
+                            if let stringValue = valueRef as? String {
+                                properties[name] = stringValue
+                            } else if let numberValue = valueRef as? NSNumber {
+                                properties[name] = numberValue.stringValue
+                            } else if let boolValue = valueRef as? Bool {
+                                properties[name] = boolValue ? "true" : "false"
+                            } else if CFGetTypeID(valueRef as CFTypeRef) == AXUIElementGetTypeID() {
+                                properties[name] = "Element"
+                            } else if valueRef == nil {
+                                properties[name] = "nil"
+                            } else {
+                                properties[name] = "Complex Value"
+                            }
+                        }
+                    }
+                    
+                    // Get position and size specifically
+                    if element.role == "Window" || element.role == "Button" {
+                        var positionRef: CFTypeRef?
+                        if AXUIElementCopyAttributeValue(axElement, kAXPositionAttribute as CFString, &positionRef) == .success,
+                           let position = positionRef as? NSValue {
+                            var point = NSPoint()
+                            position.getValue(&point)
+                            properties["Position"] = "{x: \(Int(point.x)), y: \(Int(point.y))}"
+                        }
+                        
+                        var sizeRef: CFTypeRef?
+                        if AXUIElementCopyAttributeValue(axElement, kAXSizeAttribute as CFString, &sizeRef) == .success,
+                           let size = sizeRef as? NSValue {
+                            var sizeValue = NSSize()
+                            size.getValue(&sizeValue)
+                            properties["Size"] = "{width: \(Int(sizeValue.width)), height: \(Int(sizeValue.height))}"
+                        }
+                    }
+                }
+                
+                // Get available actions
+                var actionsArrayRef: CFArray?
+                if AXUIElementCopyActionNames(axElement, &actionsArrayRef) == .success,
+                   let actionNames = actionsArrayRef as? [String] {
+                    if !actionNames.isEmpty {
+                        properties["Available Actions"] = actionNames.joined(separator: ", ")
+                    }
+                }
+            }
+            
+            DispatchQueue.main.async {
+                self?.properties = properties
+            }
+        }
+    }
+    
+    func loadChildren(for element: UIElement, completion: @escaping () -> Void) {
+        // Reset children
+        element.children = []
+        
+        // Get element children directly from the accessibility API
+        if let axElement = element.axElement {
+            // Mark as loading
+            element.isLoading = true
+            
+            // Use a timeout for safety
+            let timeoutQueue = DispatchQueue(label: "com.timeout.queue")
+            var hasCompleted = false
+            
+            // Set a timeout
+            timeoutQueue.asyncAfter(deadline: .now() + 0.5) {
+                if !hasCompleted {
+                    hasCompleted = true
+                    print("Timeout loading children")
+                    DispatchQueue.main.async {
+                        element.isLoading = false
+                        completion()
+                    }
+                }
+            }
+            
+            // Try to get children
+            DispatchQueue.global(qos: .userInitiated).async {
+                var childrenRef: CFTypeRef?
+                let result = AXUIElementCopyAttributeValue(axElement, kAXChildrenAttribute as CFString, &childrenRef)
+                
+                if result == .success, let childrenArray = childrenRef as? [AXUIElement] {
+                    var newChildren: [UIElement] = []
+                    
+                    // Only get a reasonable number to prevent freezing
+                    for child in childrenArray.prefix(20) {
+                        var roleRef: CFTypeRef?
+                        AXUIElementCopyAttributeValue(child, kAXRoleAttribute as CFString, &roleRef)
+                        let role = (roleRef as? String) ?? "Unknown"
+                        
+                        var titleRef: CFTypeRef?
+                        AXUIElementCopyAttributeValue(child, kAXTitleAttribute as CFString, &titleRef)
+                        var name = (titleRef as? String) ?? role
+                        
+                        // Try description if title is empty
+                        if name.isEmpty || name == role {
+                            var descRef: CFTypeRef?
+                            AXUIElementCopyAttributeValue(child, kAXDescriptionAttribute as CFString, &descRef)
+                            if let desc = descRef as? String, !desc.isEmpty {
+                                name = desc
+                            }
+                        }
+                        
+                        // Create child element
+                        let childElement = UIElement(
+                            name: name,
+                            role: role,
+                            appInfo: element.appInfo,
+                            description: "\(role) element",
+                            parent: element,
+                            axElement: child
+                        )
+                        
+                        // Add to new children list
+                        newChildren.append(childElement)
+                    }
+                    
+                    // Update element on main thread
+                    DispatchQueue.main.async {
+                        element.children = newChildren
+                        element.isLoading = false
+                        
+                        if !hasCompleted {
+                            hasCompleted = true
+                            completion()
+                        }
+                    }
+                } else {
+                    if !hasCompleted {
+                        hasCompleted = true
+                        DispatchQueue.main.async {
+                            element.isLoading = false
+                            completion()
+                        }
+                    }
+                }
+            }
+        } else {
+            // No AX element available
+            completion()
+        }
     }
     
     func checkAccess() -> Bool {
-        return safeAccessibility.checkAccessibilityPermissions()
+        // Check if accessibility is authorized
+        let checkOptions = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as String: true]
+        return AXIsProcessTrustedWithOptions(checkOptions as CFDictionary)
+    }
+    
+    /// Get a list of supported actions for the given element
+    func getSupportedActions(for element: UIElement) -> [String] {
+        guard let axElement = element.axElement else {
+            return []
+        }
+        
+        var actionsArrayRef: CFArray?
+        let result = AXUIElementCopyActionNames(axElement, &actionsArrayRef)
+        
+        if result == .success, let actionNames = actionsArrayRef as? [String] {
+            return actionNames
+        }
+        
+        return []
     }
 }
 
@@ -559,10 +430,15 @@ struct ContentView: View {
                 
                 Spacer()
                 
-                Toggle(isOn: $viewModel.useMockData) {
-                    Text("Safe Mode")
-                }
-                .toggleStyle(SwitchToggleStyle())
+                // Safe Mode toggle removed - now always using real API with interaction
+                Text("Interactive Mode")
+                    .foregroundColor(.green)
+                    .font(.caption)
+                    .padding(6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color.green.opacity(0.1))
+                    )
             }
             .padding()
             .background(Color(.controlBackgroundColor))
@@ -606,12 +482,12 @@ struct ContentView: View {
                     Text("Loading...")
                         .font(.caption)
                 } else {
-                    Image(systemName: viewModel.useMockData ? "shield.fill" : "network")
-                        .foregroundColor(viewModel.useMockData ? .orange : .green)
+                    Image(systemName: "hand.tap")
+                        .foregroundColor(.green)
                     
-                    Text(viewModel.useMockData ? "Safe Mode" : "Accessibility API Mode")
+                    Text("Accessibility Explorer (With Interaction)")
                         .font(.caption)
-                        .foregroundColor(viewModel.useMockData ? .orange : .green)
+                        .foregroundColor(.green)
                 }
                 
                 Spacer()
@@ -1460,11 +1336,25 @@ struct PropertiesView: View {
 /// Actions view
 struct ActionsView: View {
     @EnvironmentObject private var viewModel: ExplorerViewModel
+    @State private var isPerformingAction = false
+    @State private var actionResult: (success: Bool, message: String?) = (false, nil)
+    @State private var showingActionResult = false
+    @State private var showingTextInput = false
+    @State private var textInputValue = ""
+    @State private var showingValueEditor = false
+    @State private var valueEditorValue = ""
+    @State private var showingPositionEditor = false
+    @State private var positionX: String = "0"
+    @State private var positionY: String = "0"
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Available Actions")
                 .font(.headline)
+            
+            if showingActionResult {
+                actionResultView
+            }
             
             if let element = viewModel.selectedElement {
                 ForEach(actionsForElement(element), id: \.0) { action in
@@ -1483,49 +1373,503 @@ struct ActionsView: View {
                         
                         Spacer()
                         
-                        Button("Perform") {
-                            // In this version, we won't actually perform actions
-                            print("Would perform \(action.0) on \(element.name)")
+                        if isPerformingAction {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                        } else {
+                            Button("Perform") {
+                                performAction(action.0, on: element)
+                            }
+                            .buttonStyle(.bordered)
                         }
-                        .buttonStyle(.bordered)
                     }
                     .padding()
                     .background(Color(.windowBackgroundColor))
                     .cornerRadius(8)
                 }
+                
+                Text("Note: Actions will affect the actual application UI.")
+                    .font(.caption)
+                    .foregroundColor(.blue)
+                    .padding(.top)
             } else {
                 Text("No element selected")
                     .foregroundColor(.secondary)
             }
             
             Spacer()
+        }
+        .sheet(isPresented: $showingTextInput) {
+            textInputSheet
+        }
+        .sheet(isPresented: $showingValueEditor) {
+            valueEditorSheet
+        }
+        .sheet(isPresented: $showingPositionEditor) {
+            positionEditorSheet
+        }
+    }
+    
+    // Action result status view
+    private var actionResultView: some View {
+        HStack {
+            Image(systemName: actionResult.success ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                .foregroundColor(actionResult.success ? .green : .red)
             
-            Text("Note: Actions in this demo have no effect on the actual UI elements.")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            VStack(alignment: .leading) {
+                Text(actionResult.success ? "Action Successful" : "Action Failed")
+                    .fontWeight(.semibold)
+                
+                if let message = actionResult.message {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            Spacer()
+            
+            Button {
+                showingActionResult = false
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding()
+        .background(actionResult.success ? Color.green.opacity(0.1) : Color.red.opacity(0.1))
+        .cornerRadius(8)
+    }
+    
+    // Text input sheet for enter text action
+    private var textInputSheet: some View {
+        VStack(spacing: 20) {
+            Text("Enter Text")
+                .font(.headline)
+            
+            TextField("Text to insert", text: $textInputValue)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .padding()
+            
+            HStack {
+                Button("Cancel") {
+                    showingTextInput = false
+                    textInputValue = ""
+                }
+                .keyboardShortcut(.escape)
+                
+                Spacer()
+                
+                Button("Insert") {
+                    guard let element = viewModel.selectedElement else { return }
+                    
+                    showingTextInput = false
+                    isPerformingAction = true
+                    
+                    performTextEntryAction(on: element, text: textInputValue) { success, message in
+                        DispatchQueue.main.async {
+                            isPerformingAction = false
+                            actionResult = (success, message ?? "Text entered successfully")
+                            showingActionResult = true
+                            
+                            // Refresh properties after action
+                            if success {
+                                viewModel.loadProperties(for: element)
+                            }
+                        }
+                    }
+                    
+                    textInputValue = ""
+                }
+                .keyboardShortcut(.return)
+                .disabled(textInputValue.isEmpty)
+            }
+            .padding()
+        }
+        .frame(width: 400, height: 200)
+        .padding()
+    }
+    
+    // Value editor sheet for sliders, steppers, etc.
+    private var valueEditorSheet: some View {
+        VStack(spacing: 20) {
+            Text("Set Value")
+                .font(.headline)
+            
+            TextField("Value", text: $valueEditorValue)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .padding()
+            
+            HStack {
+                Button("Cancel") {
+                    showingValueEditor = false
+                    valueEditorValue = ""
+                }
+                .keyboardShortcut(.escape)
+                
+                Spacer()
+                
+                Button("Set") {
+                    guard let element = viewModel.selectedElement else { return }
+                    
+                    showingValueEditor = false
+                    isPerformingAction = true
+                    
+                    performSetValueAction(on: element, value: valueEditorValue) { success, message in
+                        DispatchQueue.main.async {
+                            isPerformingAction = false
+                            actionResult = (success, message ?? "Value set successfully")
+                            showingActionResult = true
+                            
+                            // Refresh properties after action
+                            if success {
+                                viewModel.loadProperties(for: element)
+                            }
+                        }
+                    }
+                    
+                    valueEditorValue = ""
+                }
+                .keyboardShortcut(.return)
+                .disabled(valueEditorValue.isEmpty)
+            }
+            .padding()
+        }
+        .frame(width: 400, height: 200)
+        .padding()
+    }
+    
+    // Position editor sheet for moving/positioning elements
+    private var positionEditorSheet: some View {
+        VStack(spacing: 20) {
+            Text("Set Position")
+                .font(.headline)
+            
+            HStack {
+                Text("X:")
+                    .frame(width: 20)
+                TextField("X Position", text: $positionX)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+            }
+            .padding(.horizontal)
+            
+            HStack {
+                Text("Y:")
+                    .frame(width: 20)
+                TextField("Y Position", text: $positionY)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+            }
+            .padding(.horizontal)
+            
+            HStack {
+                Button("Cancel") {
+                    showingPositionEditor = false
+                }
+                .keyboardShortcut(.escape)
+                
+                Spacer()
+                
+                Button("Set Position") {
+                    guard let element = viewModel.selectedElement,
+                          let x = Int(positionX),
+                          let y = Int(positionY) else { return }
+                    
+                    showingPositionEditor = false
+                    isPerformingAction = true
+                    
+                    performSetPositionAction(on: element, x: x, y: y) { success, message in
+                        DispatchQueue.main.async {
+                            isPerformingAction = false
+                            actionResult = (success, message ?? "Position set successfully")
+                            showingActionResult = true
+                            
+                            // Refresh properties after action
+                            if success {
+                                viewModel.loadProperties(for: element)
+                            }
+                        }
+                    }
+                }
+                .keyboardShortcut(.return)
+                .disabled(positionX.isEmpty || positionY.isEmpty)
+            }
+            .padding()
+        }
+        .frame(width: 400, height: 250)
+        .padding()
+    }
+    
+    // Perform the selected action
+    private func performAction(_ action: String, on element: UIElement) {
+        isPerformingAction = true
+        
+        switch action {
+        case "Press":
+            performPressAction(on: element) { success, message in
+                DispatchQueue.main.async {
+                    isPerformingAction = false
+                    actionResult = (success, message ?? "Button pressed successfully")
+                    showingActionResult = true
+                    
+                    // Refresh properties after action
+                    if success {
+                        viewModel.loadProperties(for: element)
+                    }
+                }
+            }
+            
+        case "Focus":
+            performFocusAction(on: element) { success, message in
+                DispatchQueue.main.async {
+                    isPerformingAction = false
+                    actionResult = (success, message ?? "Element focused successfully")
+                    showingActionResult = true
+                    
+                    // Refresh properties after action
+                    if success {
+                        viewModel.loadProperties(for: element)
+                    }
+                }
+            }
+            
+        case "Enter Text":
+            isPerformingAction = false
+            showingTextInput = true
+            
+        case "Set Value":
+            isPerformingAction = false
+            
+            // Initialize the value editor with the current value if available
+            if let axElement = element.axElement {
+                var valueRef: CFTypeRef?
+                if AXUIElementCopyAttributeValue(axElement, kAXValueAttribute as CFString, &valueRef) == .success {
+                    if let stringValue = valueRef as? String {
+                        valueEditorValue = stringValue
+                    } else if let numberValue = valueRef as? NSNumber {
+                        valueEditorValue = numberValue.stringValue
+                    }
+                }
+            }
+            
+            showingValueEditor = true
+            
+        case "Set Position":
+            isPerformingAction = false
+            
+            // Initialize with current position if available
+            if let axElement = element.axElement {
+                var positionRef: CFTypeRef?
+                if AXUIElementCopyAttributeValue(axElement, kAXPositionAttribute as CFString, &positionRef) == .success,
+                   let position = positionRef as? NSValue {
+                    var point = NSPoint()
+                    position.getValue(&point)
+                    positionX = String(Int(point.x))
+                    positionY = String(Int(point.y))
+                }
+            }
+            
+            showingPositionEditor = true
+            
+        case "Toggle":
+            performToggleAction(on: element) { success, message in
+                DispatchQueue.main.async {
+                    isPerformingAction = false
+                    actionResult = (success, message ?? "Checkbox toggled successfully")
+                    showingActionResult = true
+                    
+                    // Refresh properties after action
+                    if success {
+                        viewModel.loadProperties(for: element)
+                    }
+                }
+            }
+            
+        case "Increment":
+            performGenericAction(on: element, action: "AXIncrement") { success, message in
+                DispatchQueue.main.async {
+                    isPerformingAction = false
+                    actionResult = (success, message ?? "Value incremented successfully")
+                    showingActionResult = true
+                    
+                    // Refresh properties after action
+                    if success {
+                        viewModel.loadProperties(for: element)
+                    }
+                }
+            }
+            
+        case "Decrement":
+            performGenericAction(on: element, action: "AXDecrement") { success, message in
+                DispatchQueue.main.async {
+                    isPerformingAction = false
+                    actionResult = (success, message ?? "Value decremented successfully")
+                    showingActionResult = true
+                    
+                    // Refresh properties after action
+                    if success {
+                        viewModel.loadProperties(for: element)
+                    }
+                }
+            }
+            
+        case "Minimize":
+            performGenericAction(on: element, action: "AXMinimize") { success, message in
+                DispatchQueue.main.async {
+                    isPerformingAction = false
+                    actionResult = (success, message ?? "Window minimized successfully")
+                    showingActionResult = true
+                }
+            }
+            
+        case "Close":
+            performGenericAction(on: element, action: "AXClose") { success, message in
+                DispatchQueue.main.async {
+                    isPerformingAction = false
+                    actionResult = (success, message ?? "Window closed successfully")
+                    showingActionResult = true
+                }
+            }
+            
+        case "Raise":
+            performGenericAction(on: element, action: "AXRaise") { success, message in
+                DispatchQueue.main.async {
+                    isPerformingAction = false
+                    actionResult = (success, message ?? "Window brought to front successfully")
+                    showingActionResult = true
+                    
+                    // Refresh properties after action
+                    if success {
+                        viewModel.loadProperties(for: element)
+                    }
+                }
+            }
+            
+        case "Show Menu":
+            performGenericAction(on: element, action: "AXShowMenu") { success, message in
+                DispatchQueue.main.async {
+                    isPerformingAction = false
+                    actionResult = (success, message ?? "Menu shown successfully")
+                    showingActionResult = true
+                }
+            }
+            
+        case "Inspect":
+            isPerformingAction = false
+            actionResult = (true, "Element properties displayed")
+            showingActionResult = true
+            
+        default:
+            isPerformingAction = false
+            actionResult = (false, "Unknown action: \(action)")
+            showingActionResult = true
         }
     }
     
     private func actionsForElement(_ element: UIElement) -> [(String, String)] {
+        // Base actions on role
+        var actions: [(String, String)] = []
+        
         switch element.role {
         case "Button":
-            return [
+            actions = [
                 ("Press", "Simulate pressing this button"),
                 ("Focus", "Set keyboard focus to this button")
             ]
-        case "TextField", "TextArea":
-            return [
+            
+        case "TextField", "SearchField", "TextArea":
+            actions = [
                 ("Focus", "Set focus to this field"),
                 ("Enter Text", "Insert text into this field")
             ]
-        case "Window":
-            return [
-                ("Minimize", "Minimize this window"),
-                ("Close", "Close this window")
+            
+        case "CheckBox", "CheckBoxButton":
+            actions = [
+                ("Toggle", "Toggle checkbox state"),
+                ("Focus", "Set focus to this checkbox")
             ]
+            
+        case "Window":
+            actions = [
+                ("Raise", "Bring window to front"),
+                ("Minimize", "Minimize this window"),
+                ("Close", "Close this window"),
+                ("Set Position", "Move window to a specific position")
+            ]
+            
+        case "RadioButton":
+            actions = [
+                ("Press", "Select this radio button"),
+                ("Focus", "Set focus to this radio button")
+            ]
+            
+        case "MenuItem", "Menu":
+            actions = [
+                ("Press", "Select this menu item"),
+                ("Show Menu", "Display menu contents"),
+                ("Focus", "Set focus to this menu item")
+            ]
+            
+        case "Slider", "ScrollBar", "ValueIndicator":
+            actions = [
+                ("Set Value", "Set a specific value"),
+                ("Increment", "Increase value"),
+                ("Decrement", "Decrease value"),
+                ("Focus", "Set focus to this control")
+            ]
+            
+        case "Stepper", "IncDecButton":
+            actions = [
+                ("Increment", "Increase value"),
+                ("Decrement", "Decrease value"),
+                ("Focus", "Set focus to this control")
+            ]
+            
+        case "TabGroup", "TabList":
+            actions = [
+                ("Focus", "Set focus to tab group")
+            ]
+            
+        case "Toolbar":
+            actions = [
+                ("Focus", "Set focus to toolbar")
+            ]
+            
+        case "ScrollArea":
+            actions = [
+                ("Focus", "Set focus to scroll area")
+            ]
+            
+        case "Application":
+            actions = [
+                ("Inspect", "View detailed information about this application")
+            ]
+            
         default:
-            return [("Inspect", "View detailed information about this element")]
+            // Check if the element has specific capabilities we can use
+            if isActionSupported("AXPress", on: element) {
+                actions.append(("Press", "Activate this element"))
+            }
+            
+            if isAttributeSettable(kAXFocusedAttribute as String, on: element) {
+                actions.append(("Focus", "Set focus to this element"))
+            }
+            
+            if isAttributeSettable(kAXValueAttribute as String, on: element) {
+                actions.append(("Set Value", "Change the value of this element"))
+            }
+            
+            if isAttributeSettable(kAXPositionAttribute as String, on: element) {
+                actions.append(("Set Position", "Move this element"))
+            }
+            
+            // If we still have no actions, add a generic inspect action
+            if actions.isEmpty {
+                actions = [("Inspect", "View detailed information about this element")]
+            }
         }
+        
+        return actions
     }
     
     private func iconForAction(_ action: String) -> String {
@@ -1533,10 +1877,315 @@ struct ActionsView: View {
         case "Press": return "hand.tap"
         case "Focus": return "scope"
         case "Enter Text": return "text.cursor"
+        case "Toggle": return "checkmark.square"
+        case "Increment": return "plus.circle"
+        case "Decrement": return "minus.circle"
+        case "Set Value": return "slider.horizontal.3"
+        case "Set Position": return "arrow.up.left.and.arrow.down.right"
         case "Minimize": return "arrow.down.right.square"
         case "Close": return "xmark.square"
+        case "Raise": return "square.stack.3d.up"
+        case "Show Menu": return "list.bullet"
         case "Inspect": return "magnifyingglass"
         default: return "arrow.right"
+        }
+    }
+    
+    // MARK: - Accessibility Action Methods
+    
+    /// Safely check if an element supports a specific action
+    private func isActionSupported(_ action: String, on element: UIElement) -> Bool {
+        guard let axElement = element.axElement else {
+            return false
+        }
+        
+        var actionsArrayRef: CFArray?
+        let result = AXUIElementCopyActionNames(axElement, &actionsArrayRef)
+        
+        if result == .success, let actionNames = actionsArrayRef as? [String] {
+            return actionNames.contains(action)
+        }
+        
+        return false
+    }
+    
+    /// Check if an attribute is settable
+    private func isAttributeSettable(_ attribute: String, on element: UIElement) -> Bool {
+        guard let axElement = element.axElement else {
+            return false
+        }
+        
+        var isSettable: DarwinBoolean = false
+        let result = AXUIElementIsAttributeSettable(axElement, attribute as CFString, &isSettable)
+        
+        return result == .success && isSettable.boolValue
+    }
+    
+    /// Perform press action (clicking a button)
+    private func performPressAction(on element: UIElement, completion: @escaping (Bool, String?) -> Void) {
+        guard let axElement = element.axElement else {
+            completion(false, "No accessibility element reference available")
+            return
+        }
+        
+        let actionName = "AXPress"
+        
+        // For real buttons, check if press is supported
+        let isSupported = isActionSupported(actionName, on: element)
+        
+        if isSupported {
+            // Perform the action
+            let result = AXUIElementPerformAction(axElement, actionName as CFString)
+            completion(result == .success, result != .success ? "Failed to press element" : nil)
+        } else {
+            // Try default action as fallback
+            if isActionSupported("AXPick", on: element) {
+                let result = AXUIElementPerformAction(axElement, "AXPick" as CFString)
+                completion(result == .success, result != .success ? "Failed to select element" : nil)
+            } else {
+                completion(false, "Element does not support press action")
+            }
+        }
+    }
+    
+    /// Perform focus action (focusing an element)
+    private func performFocusAction(on element: UIElement, completion: @escaping (Bool, String?) -> Void) {
+        guard let axElement = element.axElement else {
+            completion(false, "No accessibility element reference available")
+            return
+        }
+        
+        // First check if focused attribute is settable
+        var isSettable: DarwinBoolean = false
+        let focusAttr = kAXFocusedAttribute as CFString
+        let result = AXUIElementIsAttributeSettable(axElement, focusAttr, &isSettable)
+        
+        if result == .success && isSettable.boolValue {
+            // Set focus by setting the focused attribute to true
+            let result = AXUIElementSetAttributeValue(axElement, focusAttr, true as CFTypeRef)
+            completion(result == .success, result != .success ? "Failed to focus element" : nil)
+        } else {
+            // Try to perform the focus action if available
+            if isActionSupported("AXFocus", on: element) {
+                let actionResult = AXUIElementPerformAction(axElement, "AXFocus" as CFString)
+                completion(actionResult == .success, actionResult != .success ? "Failed to focus element" : nil)
+            } else {
+                completion(false, "Element does not support focus")
+            }
+        }
+    }
+    
+    /// Enter text into a text field
+    private func performTextEntryAction(on element: UIElement, text: String, completion: @escaping (Bool, String?) -> Void) {
+        guard let axElement = element.axElement else {
+            completion(false, "No accessibility element reference available")
+            return
+        }
+        
+        // Check if value attribute is settable
+        var isSettable: DarwinBoolean = false
+        let valueAttr = kAXValueAttribute as CFString
+        let result = AXUIElementIsAttributeSettable(axElement, valueAttr, &isSettable)
+        
+        if result == .success && isSettable.boolValue {
+            // Focus the element first to ensure it's ready to receive input
+            performFocusAction(on: element) { success, error in
+                if success {
+                    // Set the value attribute to the new text
+                    let valueResult = AXUIElementSetAttributeValue(axElement, valueAttr, text as CFTypeRef)
+                    completion(valueResult == .success, valueResult != .success ? "Failed to set text value" : nil)
+                } else {
+                    // If we couldn't focus, we probably can't set text either
+                    completion(false, "Failed to focus element before setting text: \(error ?? "Unknown error")")
+                }
+            }
+        } else {
+            completion(false, "Element does not support text input")
+        }
+    }
+    
+    /// Toggle a checkbox or checkbox-like element
+    private func performToggleAction(on element: UIElement, completion: @escaping (Bool, String?) -> Void) {
+        // For checkboxes, we just press them which toggles the state
+        performPressAction(on: element, completion: completion)
+    }
+    
+    /// Set a numerical or string value for sliders, steppers, etc.
+    private func performSetValueAction(on element: UIElement, value: String, completion: @escaping (Bool, String?) -> Void) {
+        guard let axElement = element.axElement else {
+            completion(false, "No accessibility element reference available")
+            return
+        }
+        
+        // Check if value attribute is settable
+        var isSettable: DarwinBoolean = false
+        let valueAttr = kAXValueAttribute as CFString
+        let result = AXUIElementIsAttributeSettable(axElement, valueAttr, &isSettable)
+        
+        if result == .success && isSettable.boolValue {
+            // Try to set value as a number if possible
+            if let doubleValue = Double(value) {
+                let valueResult = AXUIElementSetAttributeValue(axElement, valueAttr, NSNumber(value: doubleValue) as CFTypeRef)
+                completion(valueResult == .success, valueResult != .success ? "Failed to set numerical value" : nil)
+            } else {
+                // Otherwise set as string
+                let valueResult = AXUIElementSetAttributeValue(axElement, valueAttr, value as CFTypeRef)
+                completion(valueResult == .success, valueResult != .success ? "Failed to set value" : nil)
+            }
+        } else {
+            completion(false, "Element does not support value setting")
+        }
+    }
+    
+    /// Set position for an element
+    private func performSetPositionAction(on element: UIElement, x: Int, y: Int, completion: @escaping (Bool, String?) -> Void) {
+        guard let axElement = element.axElement else {
+            completion(false, "No accessibility element reference available")
+            return
+        }
+        
+        // Check if position attribute is settable
+        var isSettable: DarwinBoolean = false
+        let positionAttr = kAXPositionAttribute as CFString
+        let result = AXUIElementIsAttributeSettable(axElement, positionAttr, &isSettable)
+        
+        if result == .success && isSettable.boolValue {
+            // Create a CGPoint value
+            var point = CGPoint(x: CGFloat(x), y: CGFloat(y))
+            
+            // Convert to AXValue
+            var axValue: AXValue?
+            axValue = AXValueCreate(.cgPoint, &point)
+            
+            if let positionValue = axValue {
+                // Set the position
+                let setResult = AXUIElementSetAttributeValue(axElement, positionAttr, positionValue)
+                completion(setResult == .success, setResult != .success ? "Failed to set position" : nil)
+            } else {
+                completion(false, "Failed to create position value")
+            }
+        } else {
+            completion(false, "Element does not support position setting")
+        }
+    }
+    
+    /// Perform increment action for steppers, sliders, etc
+    private func performIncrementAction(on element: UIElement, completion: @escaping (Bool, String?) -> Void) {
+        guard let axElement = element.axElement else {
+            completion(false, "No accessibility element reference available")
+            return
+        }
+        
+        if isActionSupported("AXIncrement", on: element) {
+            let result = AXUIElementPerformAction(axElement, "AXIncrement" as CFString)
+            completion(result == .success, result != .success ? "Failed to increment value" : nil)
+        } else {
+            // Try to increment value manually if possible
+            incrementValueManually(element: element, completion: completion)
+        }
+    }
+    
+    /// Perform decrement action for steppers, sliders, etc
+    private func performDecrementAction(on element: UIElement, completion: @escaping (Bool, String?) -> Void) {
+        guard let axElement = element.axElement else {
+            completion(false, "No accessibility element reference available")
+            return
+        }
+        
+        if isActionSupported("AXDecrement", on: element) {
+            let result = AXUIElementPerformAction(axElement, "AXDecrement" as CFString)
+            completion(result == .success, result != .success ? "Failed to decrement value" : nil)
+        } else {
+            // Try to decrement value manually if possible
+            decrementValueManually(element: element, completion: completion)
+        }
+    }
+    
+    /// Attempt to increment a value manually by reading and updating the value attribute
+    private func incrementValueManually(element: UIElement, completion: @escaping (Bool, String?) -> Void) {
+        guard let axElement = element.axElement else {
+            completion(false, "No accessibility element reference available")
+            return
+        }
+        
+        // Check if the element has a value attribute
+        var valueRef: CFTypeRef?
+        let getResult = AXUIElementCopyAttributeValue(axElement, kAXValueAttribute as CFString, &valueRef)
+        
+        if getResult == .success, let currentValue = valueRef {
+            // Determine how to increment based on value type
+            if let numberValue = currentValue as? NSNumber {
+                // For numbers, increment by 1 or 0.1 depending on type
+                let newValue: NSNumber
+                if numberValue.doubleValue.truncatingRemainder(dividingBy: 1) == 0 {
+                    // Integer value
+                    newValue = NSNumber(value: numberValue.intValue + 1)
+                } else {
+                    // Float/double value
+                    newValue = NSNumber(value: numberValue.doubleValue + 0.1)
+                }
+                
+                // Set the new value
+                let setResult = AXUIElementSetAttributeValue(axElement, kAXValueAttribute as CFString, newValue as CFTypeRef)
+                completion(setResult == .success, setResult != .success ? "Failed to increment value" : nil)
+            } else {
+                completion(false, "Cannot increment non-numeric value")
+            }
+        } else {
+            completion(false, "Element does not have a value attribute")
+        }
+    }
+    
+    /// Attempt to decrement a value manually by reading and updating the value attribute
+    private func decrementValueManually(element: UIElement, completion: @escaping (Bool, String?) -> Void) {
+        guard let axElement = element.axElement else {
+            completion(false, "No accessibility element reference available")
+            return
+        }
+        
+        // Check if the element has a value attribute
+        var valueRef: CFTypeRef?
+        let getResult = AXUIElementCopyAttributeValue(axElement, kAXValueAttribute as CFString, &valueRef)
+        
+        if getResult == .success, let currentValue = valueRef {
+            // Determine how to decrement based on value type
+            if let numberValue = currentValue as? NSNumber {
+                // For numbers, decrement by 1 or 0.1 depending on type
+                let newValue: NSNumber
+                if numberValue.doubleValue.truncatingRemainder(dividingBy: 1) == 0 {
+                    // Integer value
+                    newValue = NSNumber(value: numberValue.intValue - 1)
+                } else {
+                    // Float/double value
+                    newValue = NSNumber(value: numberValue.doubleValue - 0.1)
+                }
+                
+                // Set the new value
+                let setResult = AXUIElementSetAttributeValue(axElement, kAXValueAttribute as CFString, newValue as CFTypeRef)
+                completion(setResult == .success, setResult != .success ? "Failed to decrement value" : nil)
+            } else {
+                completion(false, "Cannot decrement non-numeric value")
+            }
+        } else {
+            completion(false, "Element does not have a value attribute")
+        }
+    }
+    
+    /// Perform a generic action on an element
+    private func performGenericAction(on element: UIElement, action: String, completion: @escaping (Bool, String?) -> Void) {
+        guard let axElement = element.axElement else {
+            completion(false, "No accessibility element reference available")
+            return
+        }
+        
+        // Check if the element supports this action
+        if isActionSupported(action, on: element) {
+            // Perform the action
+            let result = AXUIElementPerformAction(axElement, action as CFString)
+            completion(result == .success, result != .success ? "Failed to perform \(action)" : nil)
+        } else {
+            // Action not supported
+            completion(false, "Element does not support the \(action) action")
         }
     }
 }
