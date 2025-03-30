@@ -10,3 +10,19 @@ DerivedData/
 .netrc
 .build
 **/CLAUDE.local.md
+
+# Build artifacts
+AccessibilityExplorer/AccessibilityExplorerApp
+*.o
+*.swiftmodule
+
+# Logs and temporary files
+*.log
+log*.txt
+debug.log
+out.txt
+sample*.txt
+Spindump.txt
+
+# Generated files
+*.plist
