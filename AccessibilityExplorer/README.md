@@ -2,6 +2,14 @@
 
 A safe macOS accessibility explorer that provides a visual interface for exploring the accessibility hierarchy of macOS applications without freezing or causing high CPU usage.
 
+## Implementation Status
+
+✅ **Fully Implemented Basic Version**: We've created a stable, working version of the AccessibilityExplorer that successfully accesses the macOS Accessibility APIs without freezing!
+
+The implementation uses a simplified approach in a single file (`BasicExplorerApp.swift`) to make it stable and maintainable. The detailed implementation is described in [UPDATES.md](./UPDATES.md).
+
+For build instructions, see [BUILD_INFO.md](./BUILD_INFO.md).
+
 ## Features
 
 - **Safe Mode**: Static mock data to completely avoid accessibility API calls
