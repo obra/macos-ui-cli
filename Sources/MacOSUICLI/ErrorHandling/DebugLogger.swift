@@ -34,10 +34,27 @@ public class DebugLogger {
     /// The formatter to use for log messages
     private var formatter: OutputFormatter?
     
+    /// Timestamp of when the logger was initialized
+    private let startTime = Date()
+    
+    /// Returns the time elapsed since logger initialization
+    public var elapsedTime: TimeInterval {
+        return Date().timeIntervalSince(startTime)
+    }
+    
+    /// Returns a formatted timestamp for the current elapsed time
+    public var elapsedTimeString: String {
+        let totalSeconds = elapsedTime
+        let minutes = Int(totalSeconds / 60)
+        let seconds = Int(totalSeconds.truncatingRemainder(dividingBy: 60))
+        let milliseconds = Int((totalSeconds.truncatingRemainder(dividingBy: 1)) * 1000)
+        return String(format: "%02d:%02d.%03d", minutes, seconds, milliseconds)
+    }
+    
     /// Private initializer to enforce singleton pattern
     private init() {
-        // Get the log directory
-        let logDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("MacOSUICLI/logs")
+        // Use more accessible locations for logs
+        let logDirectory = URL(fileURLWithPath: "/tmp/macos-ui-cli-logs")
         
         // Create the directory if it doesn't exist
         try? FileManager.default.createDirectory(at: logDirectory, withIntermediateDirectories: true)
@@ -47,6 +64,15 @@ public class DebugLogger {
         dateFormatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
         let timestamp = dateFormatter.string(from: Date())
         logFilePath = logDirectory.appendingPathComponent("debug_\(timestamp).log").path
+        
+        // Enable logging to file by default
+        logToFile = true
+        logLevel = .debug
+        
+        // Log startup information
+        let logStart = "--- MacOS UI CLI Debug Log Started at \(timestamp) ---"
+        print(logStart)
+        log(logStart, level: .info)
     }
     
     /// Sets the formatter to use for log messages
@@ -72,12 +98,17 @@ public class DebugLogger {
         // Only log if the level is high enough
         guard level <= logLevel else { return }
         
+        // Get thread information
+        let threadName = Thread.current.isMainThread ? "MainThread" : Thread.current.name ?? "BackgroundThread"
+        let threadId = pthread_self()
+        
         // Create the log message
         let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         let fileURL = URL(fileURLWithPath: file)
         let fileName = fileURL.lastPathComponent
         
-        let logMessage = "[\(timestamp)] [\(level)] [\(fileName):\(line)] \(function): \(message)"
+        // Include elapsed time in the log message
+        let logMessage = "[\(timestamp)] [\(elapsedTimeString)] [\(level)] [\(threadName):\(threadId)] [\(fileName):\(line)] \(function): \(message)"
         
         // Print to console if appropriate
         if level <= .error || logLevel >= .debug {

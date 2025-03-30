@@ -39,14 +39,21 @@ public class PlainTextFormatter: OutputFormatter {
     
     public func formatApplication(_ app: Application) -> String {
         let name = colorize(app.name, with: ANSIColor.bold)
+        let frontmost = app.isFrontmost ? colorize(" (active)", with: ANSIColor.green) : ""
         
         switch verbosity {
         case .minimal:
             return name
         case .normal:
-            return "\(name) (PID: \(app.pid))"
+            return "\(name)\(frontmost) (PID: \(app.pid))"
         case .detailed, .debug:
-            return "\(name)\n  PID: \(app.pid)\n  Windows: \(app.getWindowsNoThrow().count)"
+            var result = "\(name)\(frontmost)\n"
+            result += "  PID: \(app.pid)\n"
+            if let bundleID = app.bundleIdentifier {
+                result += "  Bundle ID: \(bundleID)\n"
+            }
+            result += "  Windows: \(app.getWindowsNoThrow().count)"
+            return result
         }
     }
     
@@ -101,18 +108,55 @@ public class PlainTextFormatter: OutputFormatter {
     public func formatElement(_ element: Element) -> String {
         let role = colorize(element.role, with: ANSIColor.green)
         let title = colorize(element.title, with: ANSIColor.bold)
+        let roleDescription = element.roleDescription.isEmpty ? "" : colorize(element.roleDescription, with: ANSIColor.cyan)
+        let subRole = element.subRole.isEmpty ? "" : colorize(element.subRole, with: ANSIColor.magenta)
         
         switch verbosity {
         case .minimal:
+            // If title is empty but we have a role description, show it
+            if element.title.isEmpty && !element.roleDescription.isEmpty {
+                return "\(role): \(roleDescription)"
+            } else if !element.title.isEmpty && !element.roleDescription.isEmpty && element.title != element.roleDescription {
+                // Show both title and role description when both are available and different
+                return "\(role): \(title) (\(roleDescription))"
+            }
             return "\(role): \(title)"
+            
         case .normal:
-            var output = "\(role): \(title)"
+            var output = "\(role)"
+            
+            // Add subrole if available
+            if !element.subRole.isEmpty {
+                output += " (\(subRole))"
+            }
+            
+            // Add title and role description when both are available
+            if !element.title.isEmpty {
+                output += ": \(title)"
+                
+                // If we also have a role description and it's different from title, add it
+                if !element.roleDescription.isEmpty && element.title != element.roleDescription {
+                    output += " (\(roleDescription))"
+                }
+            } else if !element.roleDescription.isEmpty {
+                output += ": \(roleDescription)"
+            }
+            
             if element.hasChildren {
                 output += " (has children)"
             }
             return output
+            
         case .detailed:
-            var output = "\(role): \(title)\n"
+            var output = "\(role)"
+            if !element.subRole.isEmpty {
+                output += " (\(subRole))"
+            }
+            output += ": \(title)\n"
+            
+            if !element.roleDescription.isEmpty {
+                output += "  Role Description: \(roleDescription)\n"
+            }
             
             let attributes = element.getAttributesNoThrow()
             if !attributes.isEmpty {
@@ -123,11 +167,21 @@ public class PlainTextFormatter: OutputFormatter {
             }
             
             return output
+            
         case .debug:
-            var output = "\(role): \(title)\n"
+            var output = "\(role)"
+            if !element.subRole.isEmpty {
+                output += " (\(subRole))"
+            }
+            output += ": \(title)\n"
+            
+            if !element.roleDescription.isEmpty {
+                output += "  Role Description: \(roleDescription)\n"
+            }
             
             output += "  PID: \(element.pid)\n"
             output += "  Focused: \(element.isFocused)\n"
+            output += "  Has Children: \(element.hasChildren)\n"
             
             let attributes = element.getAttributesNoThrow()
             if !attributes.isEmpty {
@@ -143,6 +197,10 @@ public class PlainTextFormatter: OutputFormatter {
                 for action in actions {
                     output += "    \(action)\n"
                 }
+            }
+            
+            if !element.children.isEmpty {
+                output += "  Child Elements: \(element.children.count)\n"
             }
             
             return output
@@ -173,12 +231,35 @@ public class PlainTextFormatter: OutputFormatter {
     private func formatElementInHierarchy(_ element: Element, level: Int) -> String {
         let indent = String(repeating: "  ", count: level)
         let role = colorize(element.role, with: ANSIColor.green)
-        let title = colorize(element.title, with: ANSIColor.bold)
+        let title = colorize(element.title.isEmpty ? "(no title)" : element.title, with: ANSIColor.bold)
+        let roleDescription = element.roleDescription.isEmpty ? "" : colorize(element.roleDescription, with: ANSIColor.cyan)
+        let subRole = element.subRole.isEmpty ? "" : colorize(element.subRole, with: ANSIColor.magenta)
         
-        var output = "\(indent)\(role): \(title)"
+        var output = "\(indent)\(role)"
+        
+        // Add subrole if available
+        if !element.subRole.isEmpty {
+            output += ":\(subRole)"
+        }
+        
+        // Add title or role description based on what's available
+        if !element.title.isEmpty {
+            output += "[\(title)]"
+            // If we also have a role description, add it in parentheses if different
+            if !element.roleDescription.isEmpty && element.title != element.roleDescription {
+                output += " (\(roleDescription))"
+            }
+        } else if !element.roleDescription.isEmpty {
+            output += "[\(roleDescription)]"
+        }
         
         // For verbosity levels above minimal, show attributes
         if verbosity.rawValue >= VerbosityLevel.detailed.rawValue {
+            // Display role description if we have it and it hasn't been shown already
+            if !element.roleDescription.isEmpty && !element.title.isEmpty {
+                output += "\n\(indent)  Role Description: \(roleDescription)"
+            }
+            
             let attributes = element.getAttributesNoThrow()
             if !attributes.isEmpty {
                 output += "\n"
@@ -193,6 +274,9 @@ public class PlainTextFormatter: OutputFormatter {
             for child in element.children {
                 output += "\n\(formatElementInHierarchy(child, level: level + 1))"
             }
+        } else if element.hasChildren && element.children.isEmpty {
+            // Indicate that the element has children but they're not accessible
+            output += "\n\(indent)  \(colorize("(has children, not accessible)", with: ANSIColor.yellow))"
         }
         
         return output

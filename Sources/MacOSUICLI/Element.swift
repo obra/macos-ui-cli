@@ -5,7 +5,47 @@ import Foundation
 import Haxcessibility
 
 /// Represents a UI element from a macOS application
-public class Element {
+public class Element: Equatable {
+    // Additional properties to capture more useful accessibility information
+    public var roleDescription: String = ""
+    public var subRole: String = ""
+    
+    /// A user-friendly description of this element
+    public var description: String {
+        var desc = role
+        
+        // Include subrole if available (like AXMinimizeButton)
+        if !subRole.isEmpty {
+            desc += ":\(subRole)"
+        }
+        
+        // If we have a title, use it
+        if !title.isEmpty {
+            desc += "[\(title)]"
+            // Show role description in parentheses if both are available and different
+            if !roleDescription.isEmpty && title != roleDescription {
+                desc += " (\(roleDescription))"
+            }
+        } 
+        // Otherwise, if we have a role description, use that instead
+        else if !roleDescription.isEmpty {
+            desc += "[\(roleDescription)]"
+        }
+        
+        return desc
+    }
+    
+    /// Implement Equatable to allow comparing elements
+    public static func == (lhs: Element, rhs: Element) -> Bool {
+        // Compare by reference if both have haxElement
+        if let lhsElement = lhs.haxElement, let rhsElement = rhs.haxElement {
+            return lhsElement === rhsElement
+        }
+        
+        // Always compare by reference for interactive mode element tracking
+        // This ensures that elements with the same role and title are still treated as distinct
+        return lhs === rhs
+    }
     private var haxElement: HAXElement? = nil
     
     /// The role of the element (e.g., button, text field)
@@ -29,6 +69,9 @@ public class Element {
     /// The child elements
     public var children: [Element] = []
     
+    /// Custom data for element - used for additional storage like raw AXUIElement references
+    public var customData: [String: Any] = [:]
+    
     /// Creates an Element instance from a HAXElement instance
     /// - Parameter haxElement: The HAXElement instance
     init(haxElement: HAXElement?) {
@@ -37,6 +80,27 @@ public class Element {
         self.title = haxElement?.title ?? ""
         self.hasChildren = haxElement?.hasChildren ?? false
         self.pid = haxElement?.processIdentifier ?? 0
+        
+        // Get additional properties for better descriptions
+        if let haxElement = haxElement {
+            // Get role description (like "minimize button")
+            do {
+                if let roleDesc = try haxElement.getAttributeValue(forKey: "AXRoleDescription") as? String {
+                    self.roleDescription = roleDesc
+                }
+            } catch {
+                // Just silently fail if we can't get it
+            }
+            
+            // Get subrole (like AXMinimizeButton)
+            do {
+                if let subRole = try haxElement.getAttributeValue(forKey: "AXSubrole") as? String {
+                    self.subRole = subRole
+                }
+            } catch {
+                // Just silently fail if we can't get it
+            }
+        }
         
         // Load children
         if let haxChildren = haxElement?.children {
@@ -54,10 +118,15 @@ public class Element {
     ///   - role: The role of the element
     ///   - title: The title of the element
     ///   - hasChildren: Whether the element has children
-    init(role: String, title: String, hasChildren: Bool = false) {
+    ///   - roleDescription: Optional role description for the element
+    ///   - subRole: Optional subrole for the element
+    public init(role: String, title: String, hasChildren: Bool = false, 
+         roleDescription: String = "", subRole: String = "") {
         self.role = role
         self.title = title
         self.hasChildren = hasChildren
+        self.roleDescription = roleDescription
+        self.subRole = subRole
     }
     
     /// Gets the underlying HAXElement instance
@@ -129,6 +198,118 @@ public class Element {
         }
     }
     
+    /// Loads children for this element if not already loaded.
+    /// - Returns: True if children were loaded successfully or already loaded, false otherwise.
+    @discardableResult
+    public func loadChildrenIfNeeded() -> Bool {
+        // Skip if children are already loaded
+        if !self.children.isEmpty {
+            return true
+        }
+        
+        // Skip if not expected to have children
+        if !self.hasChildren {
+            return false
+        }
+        
+        DebugLogger.shared.logInfo("Loading children for \(self.description)")
+        
+        // Try all available methods to load children
+        
+        // Method 1: Using HAXElement's children property
+        if let haxElement = self.haxElement, let haxChildren = haxElement.children, !haxChildren.isEmpty {
+            DebugLogger.shared.logInfo("Found \(haxChildren.count) children using HAXElement.children")
+            for haxChild in haxChildren {
+                let childElement = Element(haxElement: haxChild)
+                childElement.parent = self
+                self.children.append(childElement)
+            }
+            return true
+        }
+        
+        // Method 2: Using HAXElement's getAttribute for AXChildren
+        if let haxElement = self.haxElement {
+            do {
+                if let children = try haxElement.getAttributeValue(forKey: "AXChildren") as? [HAXElement], !children.isEmpty {
+                    DebugLogger.shared.logInfo("Found \(children.count) children using HAXElement.getAttributeValue")
+                    for child in children {
+                        let childElement = Element(haxElement: child)
+                        childElement.parent = self
+                        self.children.append(childElement)
+                    }
+                    return true
+                }
+            } catch {
+                DebugLogger.shared.logWarning("Failed to get AXChildren attribute: \(error)")
+            }
+        }
+        
+        // Method 3: Using direct AXUIElement API if we have a stored reference
+        if let axRef = self.customData["axuielement"] {
+            let axObject = axRef as AnyObject
+            guard CFGetTypeID(axObject) == AXUIElementGetTypeID() else { return false }
+            let axElement = axRef as! AXUIElement
+            DebugLogger.shared.logInfo("Trying direct AXUIElement children access")
+            
+            var childrenRef: CFTypeRef?
+            let result = AXUIElementCopyAttributeValue(axElement, "AXChildren" as CFString, &childrenRef)
+            
+            if result == .success, let childArray = childrenRef as? NSArray, childArray.count > 0 {
+                DebugLogger.shared.logInfo("Found \(childArray.count) children using AXUIElementCopyAttributeValue")
+                
+                for i in 0..<childArray.count {
+                    let item = childArray[i] as AnyObject
+                    guard CFGetTypeID(item) == AXUIElementGetTypeID() else { continue }
+                    let childAXElement = childArray[i] as! AXUIElement
+                    // Create element from raw AXUIElement
+                    let childElement = self.createElementFromAXUIElement(childAXElement)
+                    childElement.parent = self
+                    self.children.append(childElement)
+                }
+                return true
+            }
+        }
+        
+        // No children found through any method
+        DebugLogger.shared.logWarning("No children found for \(self.description) despite hasChildren=true")
+        return false
+    }
+    
+    /// Helper to create an Element from a raw AXUIElement
+    private func createElementFromAXUIElement(_ axElement: AXUIElement) -> Element {
+        // Get basic properties directly from AXUIElement
+        var roleRef: CFTypeRef?
+        var titleRef: CFTypeRef?
+        var roleDescRef: CFTypeRef?
+        var subRoleRef: CFTypeRef?
+        
+        let role = AXUIElementCopyAttributeValue(axElement, "AXRole" as CFString, &roleRef) == .success ? 
+            (roleRef as? String ?? "unknown") : "unknown"
+        
+        let title = AXUIElementCopyAttributeValue(axElement, "AXTitle" as CFString, &titleRef) == .success ?
+            (titleRef as? String ?? "") : ""
+        
+        let roleDesc = AXUIElementCopyAttributeValue(axElement, "AXRoleDescription" as CFString, &roleDescRef) == .success ?
+            (roleDescRef as? String ?? "") : ""
+        
+        let subRole = AXUIElementCopyAttributeValue(axElement, "AXSubrole" as CFString, &subRoleRef) == .success ?
+            (subRoleRef as? String ?? "") : ""
+        
+        // Check if it has children
+        var childrenRef: CFTypeRef?
+        let hasChildren = AXUIElementCopyAttributeValue(axElement, "AXChildren" as CFString, &childrenRef) == .success &&
+            (childrenRef as? NSArray)?.count ?? 0 > 0
+        
+        // Create element
+        let element = Element(role: role, title: title, hasChildren: hasChildren,
+                             roleDescription: roleDesc, subRole: subRole)
+        
+        // Store the AXUIElement for later use
+        element.customData["axuielement"] = axElement
+        
+        return element
+    }
+    
     /// Gets all descendant elements that match the given criteria
     /// - Parameters:
     ///   - role: The role to match
@@ -141,16 +322,34 @@ public class Element {
         // Check if this element matches
         var matches = true
         
-        if let role = role, self.role != role {
-            matches = false
+        if let role = role {
+            // Check both main role and subrole
+            if self.role.lowercased() != role.lowercased() && self.subRole.lowercased() != role.lowercased() {
+                matches = false
+            }
         }
         
-        if let title = title, self.title != title {
-            matches = false
+        if let title = title {
+            // Check title first
+            let titleMatches = self.title.lowercased().contains(title.lowercased())
+            
+            // Check roleDescription regardless of whether title is empty
+            // This allows finding elements by role description even when they have titles
+            let descMatches = !self.roleDescription.isEmpty && 
+                             self.roleDescription.lowercased().contains(title.lowercased())
+            
+            if !titleMatches && !descMatches {
+                matches = false
+            }
         }
         
         if matches {
             results.append(self)
+        }
+        
+        // Ensure children are loaded if this element has children
+        if self.hasChildren {
+            self.loadChildrenIfNeeded()
         }
         
         // Use timeout in case the tree is very large
@@ -245,9 +444,23 @@ public class Element {
     /// Safe version of getAttributes that doesn't throw
     /// - Returns: Dictionary of attribute names and values, empty dictionary if there was an error
     public func getAttributesNoThrow() -> [String: Any] {
+        // If we don't have a HAX element, don't try to get attributes
+        if self.haxElement == nil {
+            return [:]
+        }
+        
         do {
-            return try getAttributes()
+            // Attempt to get attributes with a short timeout to prevent UI freezes
+            var attributes: [String: Any] = [:]
+            try withTimeout(0.5) {
+                attributes = try self.getAttributes()
+            }
+            return attributes
+        } catch let error as OperationError where error.errorCode == ErrorCode.operationTimeout.rawValue {
+            // Silently return empty dictionary on timeout - this is common and not worth logging
+            return [:]
         } catch {
+            // Log other errors but don't display them in UI
             DebugLogger.shared.logError(error)
             return [:]
         }

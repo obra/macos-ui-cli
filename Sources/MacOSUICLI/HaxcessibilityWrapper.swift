@@ -65,15 +65,31 @@ public class SystemAccessibility {
         let workspace = NSWorkspace.shared
         let runningApps = workspace.runningApplications
         
+        // Log how many apps NSWorkspace reports
+        DebugLogger.shared.logInfo("NSWorkspace reports \(runningApps.count) running applications")
+        
+        // Filter to only include actual GUI applications
+        let guiApps = runningApps.filter { app in
+            // Only include apps that:
+            // 1. Have a non-empty bundleIdentifier
+            // 2. Have an activationPolicy of .regular (are regular GUI apps)
+            // 3. Are not background-only
+            return app.bundleIdentifier != nil &&
+                   app.activationPolicy == .regular
+        }
+        
+        DebugLogger.shared.logInfo("Found \(guiApps.count) GUI applications after filtering")
+        
         // Convert to HAXApplication instances
         var haxApps: [HAXApplication] = []
-        for app in runningApps {
+        for app in guiApps {
             let pid = app.processIdentifier
             if pid > 0, let haxApp = HAXApplication(pid: pid) {
                 haxApps.append(haxApp)
             }
         }
         
+        DebugLogger.shared.logInfo("Successfully created \(haxApps.count) HAXApplication instances")
         return haxApps
     }
 }

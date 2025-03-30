@@ -19,12 +19,18 @@ public struct UtilityCommands: ParsableCommand {
           macos-ui-cli util version
           macos-ui-cli util info
           macos-ui-cli util format --help
+          macos-ui-cli util interactive
+          macos-ui-cli util explore "Safari"
+          macos-ui-cli util navigate "Safari"
         """,
         subcommands: [
             PermissionsCommand.self,
             VersionCommand.self,
             InfoCommand.self,
-            FormatCommand.self
+            FormatCommand.self,
+            InteractiveCommand.self,
+            ExploreCommand.self,
+            NavigateCommand.self
         ],
         defaultSubcommand: nil
     )
@@ -341,5 +347,344 @@ public struct FormatCommand: ParsableCommand {
         print("  --format <format>     Set output format (text, json, xml)")
         print("  --verbosity <level>   Set verbosity level (0-3)")
         print("  --color               Enable colorized output")
+    }
+}
+
+/// Command to enter interactive shell mode
+public struct InteractiveCommand: ParsableCommand {
+    public static var configuration = CommandConfiguration(
+        commandName: "interactive",
+        abstract: "Start interactive shell mode",
+        discussion: """
+        Start an interactive shell for exploring and manipulating UI elements.
+        This mode provides command history, tab completion, and context awareness.
+        
+        Example:
+          macos-ui-cli util interactive
+        """
+    )
+    
+    public init() {}
+    
+    public func run() throws {
+        print("Starting interactive mode...")
+        print("Type 'help' for available commands, 'exit' to quit")
+        
+        // Start the interactive shell
+        let interactive = InteractiveMode()
+        try interactive.startREPL()
+    }
+}
+
+/// Command to deeply explore an application's accessibility hierarchy
+public struct ExploreCommand: ParsableCommand {
+    public static var configuration = CommandConfiguration(
+        commandName: "explore",
+        abstract: "Deeply explore an application's UI hierarchy",
+        discussion: """
+        Thoroughly explore an application's UI hierarchy and accessibility properties.
+        This command will display all available UI elements, their attributes, and
+        accessible actions in a detailed manner.
+        
+        Examples:
+          macos-ui-cli util explore "Safari"    # Explore Safari's UI
+          macos-ui-cli util explore "Terminal"  # Explore Terminal's UI
+          macos-ui-cli util explore --all       # Show accessibility details for all apps
+          macos-ui-cli util explore --focused   # Explore currently focused app
+          macos-ui-cli util explore --depth 3   # Limit exploration depth to 3 levels
+        """
+    )
+    
+    @Argument(help: "Name of the application to explore")
+    var appName: String?
+    
+    @Option(name: .long, help: "Process ID of the specific application to explore")
+    var pid: Int32?
+    
+    @Flag(name: .long, help: "Explore all running applications")
+    var all: Bool = false
+    
+    @Flag(name: .long, help: "Explore the currently focused application")
+    var focused: Bool = false
+    
+    @Option(name: .long, help: "Maximum depth to explore in the hierarchy (default: unlimited)")
+    var depth: Int?
+    
+    @Option(name: .shortAndLong, help: "Output format: text, json, or xml")
+    var format: String = "text"
+    
+    @Option(name: .shortAndLong, help: "Verbosity level (0-3)")
+    var verbosity: Int = 2
+    
+    @Flag(name: .shortAndLong, inversion: .prefixedNo, help: "Enable colorized output")
+    var color: Bool = false
+    
+    @Flag(name: .long, help: "Include all attribute values (can be verbose)")
+    var showAttributes: Bool = false
+    
+    @Flag(name: .long, help: "Show available actions for each element")
+    var showActions: Bool = false
+    
+    @Flag(name: .long, help: "Export results to a file")
+    var export: Bool = false
+    
+    @Option(name: .long, help: "Path to export results (default: ./app-exploration.txt)")
+    var exportPath: String = "./app-exploration.txt"
+    
+    public init() {}
+    
+    public func run() throws {
+        // Create formatter with specified settings
+        let outputFormat = OutputFormat.fromString(format)
+        let verbosityLevel = VerbosityLevel.fromInt(verbosity)
+        let formatter = FormatterFactory.create(
+            format: outputFormat,
+            verbosity: verbosityLevel,
+            colorized: color
+        )
+        
+        // Check permissions
+        if AccessibilityPermissions.checkPermission() != .granted {
+            print("Accessibility permissions are required for this command.")
+            print("Use 'macos-ui-cli util permissions --request' to request permissions.")
+            throw AccessibilityError.permissionDenied
+        }
+        
+        var results: [String] = []
+        
+        // Get the application(s) to explore
+        if all {
+            // Explore all applications
+            let apps = try ApplicationManager.getAllApplications()
+            print("Exploring \(apps.count) applications...")
+            
+            for app in apps {
+                let appExploration = try exploreApplication(app, maxDepth: depth, formatter: formatter)
+                results.append(appExploration)
+                print(appExploration)
+                print("\n-----------------------------------\n")
+            }
+        } else if focused {
+            // Explore focused application
+            guard let focusedApp = try ApplicationManager.getFocusedApplication() else {
+                throw ApplicationManagerError.applicationNotFound(description: "No focused application")
+            }
+            
+            print("Exploring focused application: \(focusedApp.name)...")
+            let appExploration = try exploreApplication(focusedApp, maxDepth: depth, formatter: formatter)
+            results.append(appExploration)
+            print(appExploration)
+        } else if let specificPid = pid {
+            // Explore application by PID
+            print("Looking up application with PID: \(specificPid)...")
+            let app = try ApplicationManager.getApplicationByPID(specificPid)
+            
+            print("Exploring application: \(app.name) (PID: \(app.pid))...")
+            let appExploration = try exploreApplication(app, maxDepth: depth, formatter: formatter)
+            results.append(appExploration)
+            print(appExploration)
+        } else if let name = appName {
+            // Explore specified application
+            print("Searching for application: \(name)...")
+            let app = try ApplicationManager.getApplicationByName(name)
+            
+            print("Exploring application: \(app.name) (PID: \(app.pid))...")
+            let appExploration = try exploreApplication(app, maxDepth: depth, formatter: formatter)
+            results.append(appExploration)
+            print(appExploration)
+        } else {
+            // No application specified
+            print("Please specify an application name, use --pid to specify a process ID, or use --all or --focused")
+            throw ValidationError.invalidArgument(name: "appName", reason: "No application specified")
+        }
+        
+        // Export results if requested
+        if export {
+            print("Exporting results to \(exportPath)...")
+            let outputString = results.joined(separator: "\n\n-----------------------------------\n\n")
+            do {
+                try outputString.write(toFile: exportPath, atomically: true, encoding: .utf8)
+                print("Results exported successfully")
+            } catch {
+                print("Error exporting results: \(error.localizedDescription)")
+                throw error
+            }
+        }
+    }
+    
+    /// Explore a single application and return a detailed description
+    private func exploreApplication(_ app: Application, maxDepth: Int?, formatter: OutputFormatter) throws -> String {
+        var result = "APPLICATION: \(app.name) (PID: \(app.pid))\n"
+        result += "==================================================\n\n"
+        
+        // Get application windows
+        let windows = try app.getWindows()
+        result += "Found \(windows.count) windows:\n\n"
+        
+        for (windowIndex, window) in windows.enumerated() {
+            result += "WINDOW \(windowIndex+1): \(window.title)\n"
+            result += "--------------------------------------------------\n"
+            result += "  Position: (\(Int(window.frame.origin.x)), \(Int(window.frame.origin.y)))\n"
+            result += "  Size: \(Int(window.frame.width))x\(Int(window.frame.height))\n"
+            result += "  Fullscreen: \(window.isFullscreen ? "Yes" : "No")\n"
+            result += "  Minimized: \(window.isMinimized ? "Yes" : "No")\n\n"
+            
+            // Get window elements
+            let elements = try window.getElements()
+            
+            if elements.isEmpty {
+                result += "  No UI elements found in this window\n"
+            } else {
+                result += "  UI HIERARCHY:\n"
+                
+                // Only explore the first element since it contains the entire window hierarchy
+                if let rootElement = elements.first {
+                    result += exploreElementHierarchy(rootElement, level: 1, maxDepth: maxDepth)
+                }
+            }
+            
+            result += "\n"
+        }
+        
+        return result
+    }
+    
+    /// Recursively explore an element's hierarchy with proper indentation
+    private func exploreElementHierarchy(_ element: Element, level: Int, maxDepth: Int?) -> String {
+        // Check if we've reached the maximum depth
+        if let maxDepth = maxDepth, level > maxDepth {
+            return ""
+        }
+        
+        let indent = String(repeating: "  ", count: level)
+        var result = ""
+        
+        // Element basic information with role description
+        var elementDescription = "\(indent)- \(element.role)"
+        
+        // Include subrole if available
+        if !element.subRole.isEmpty {
+            elementDescription += ":\(element.subRole)"
+        }
+        
+        // Include title and role description
+        if !element.title.isEmpty {
+            elementDescription += " [\(element.title)]"
+            if !element.roleDescription.isEmpty && element.title != element.roleDescription {
+                elementDescription += " (\(element.roleDescription))"
+            }
+        } else if !element.roleDescription.isEmpty {
+            elementDescription += " [\(element.roleDescription)]"
+        }
+        
+        result += elementDescription + "\n"
+        
+        // Include attributes if requested
+        if showAttributes {
+            let attributes = element.getAttributesNoThrow()
+            if !attributes.isEmpty {
+                result += "\(indent)  Attributes:\n"
+                for (key, value) in attributes.sorted(by: { $0.key < $1.key }) {
+                    result += "\(indent)    \(key): \(String(describing: value))\n"
+                }
+            }
+        }
+        
+        // Include actions if requested
+        if showActions {
+            let actions = element.getAvailableActionsNoThrow()
+            if !actions.isEmpty {
+                result += "\(indent)  Actions: \(actions.joined(separator: ", "))\n"
+            }
+        }
+        
+        // Make sure children are loaded
+        if element.hasChildren {
+            element.loadChildrenIfNeeded()
+        }
+        
+        // Recursively explore children
+        if !element.children.isEmpty {
+            for child in element.children {
+                result += exploreElementHierarchy(child, level: level + 1, maxDepth: maxDepth)
+            }
+        } else if element.hasChildren {
+            // If element reports having children but none are loaded
+            result += "\(indent)  (has children, not accessible)\n"
+        }
+        
+        return result
+    }
+}
+
+/// Command to launch the curses-style UI Navigator
+public struct NavigateCommand: ParsableCommand {
+    public static var configuration = CommandConfiguration(
+        commandName: "navigate",
+        abstract: "Launch curses-style UI Navigator with keyboard navigation",
+        discussion: """
+        Launch a curses-style terminal UI for navigating and interacting with application UI elements.
+        This mode provides visual representation of UI hierarchy with keyboard navigation.
+        
+        Examples:
+          macos-ui-cli util navigate "Safari"    # Navigate Safari's UI
+          macos-ui-cli util navigate --focused   # Navigate currently focused app
+        """
+    )
+    
+    @Argument(help: "Name of the application to navigate")
+    var appName: String?
+    
+    @Flag(name: .long, help: "Navigate the currently focused application")
+    var focused: Bool = false
+    
+    @Option(name: .long, help: "Process ID of the specific application to navigate")
+    var pid: Int32?
+    
+    @Flag(name: .shortAndLong, inversion: .prefixedNo, help: "Enable colorized output")
+    var color: Bool = true
+    
+    public init() {}
+    
+    public func run() throws {
+        // Check permissions
+        if AccessibilityPermissions.checkPermission() != .granted {
+            print("Accessibility permissions are required for this command.")
+            print("Use 'macos-ui-cli util permissions --request' to request permissions.")
+            throw AccessibilityError.permissionDenied
+        }
+        
+        let formatter = FormatterFactory.create(
+            format: .plainText,
+            verbosity: .normal,
+            colorized: color
+        )
+        
+        let navigator = UINavigator(formatter: formatter)
+        
+        if focused {
+            // Navigate focused application
+            guard let focusedApp = try ApplicationManager.getFocusedApplication() else {
+                throw ApplicationManagerError.applicationNotFound(description: "No focused application")
+            }
+            
+            print("Starting UI Navigator for focused application: \(focusedApp.name)...")
+            try navigator.startWithApplication(focusedApp.name)
+        } else if let specificPid = pid {
+            // Navigate application by PID
+            print("Looking up application with PID: \(specificPid)...")
+            let app = try ApplicationManager.getApplicationByPID(specificPid)
+            
+            print("Starting UI Navigator for: \(app.name) (PID: \(app.pid))...")
+            try navigator.startWithApplication(app.name)
+        } else if let name = appName {
+            // Navigate specified application
+            print("Starting UI Navigator for: \(name)...")
+            try navigator.startWithApplication(name)
+        } else {
+            // No application specified
+            print("Please specify an application name, use --pid to specify a process ID, or use --focused")
+            throw ValidationError.invalidArgument(name: "appName", reason: "No application specified")
+        }
     }
 }

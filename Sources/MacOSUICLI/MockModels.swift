@@ -54,8 +54,12 @@ public class MockElement: Element {
     ///   - role: The role of the mock element
     ///   - title: The title of the mock element
     ///   - hasChildren: Whether the mock element has children
-    override init(role: String, title: String, hasChildren: Bool = false) {
-        super.init(role: role, title: title, hasChildren: hasChildren)
+    ///   - roleDescription: Optional role description for the element
+    ///   - subRole: Optional subrole for the element
+    override init(role: String, title: String, hasChildren: Bool = false,
+                  roleDescription: String = "", subRole: String = "") {
+        super.init(role: role, title: title, hasChildren: hasChildren,
+                   roleDescription: roleDescription, subRole: subRole)
     }
     
     /// Gets mock attributes
@@ -101,7 +105,8 @@ public class MockButtonElement: MockElement {
     /// Creates a mock button with the specified title
     /// - Parameter title: The title of the button
     init(title: String) {
-        super.init(role: "button", title: title)
+        super.init(role: "button", title: title, hasChildren: false, 
+                  roleDescription: "button", subRole: "")
     }
     
     /// Simulates pressing the button
@@ -135,7 +140,8 @@ public class MockTextFieldElement: MockElement {
     ///   - value: The initial value of the text field
     init(title: String, value: String) {
         self.value = value
-        super.init(role: "textField", title: title)
+        super.init(role: "textField", title: title, hasChildren: false,
+                  roleDescription: "text field", subRole: "")
     }
     
     /// Gets the current value of the text field

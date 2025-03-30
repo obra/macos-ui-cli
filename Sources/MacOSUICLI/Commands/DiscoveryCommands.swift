@@ -315,8 +315,9 @@ public struct ElementsCommand: ParsableCommand {
                 return
             }
             
-            // Convert Window to Element for searching
-            let rootElement = Element(role: "window", title: window.title)
+            // Get the window elements
+            let windowElements = try window.getElements()
+            let rootElement = windowElements.first ?? Element(role: "window", title: window.title)
             
             // Handle path search
             if let pathQuery = path {
