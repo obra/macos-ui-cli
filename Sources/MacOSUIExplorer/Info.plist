@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.example.MacOSUIExplorer</string>
+    <key>CFBundleName</key>
+    <string>macOS UI Explorer</string>
+    <key>CFBundleDisplayName</key>
+    <string>macOS UI Explorer</string>
+    <key>CFBundleVersion</key>
+    <string>1.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleExecutable</key>
+    <string>MacOSUIExplorer</string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0.0</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2025. All rights reserved.</string>
+    <key>NSAccessibilityUsageDescription</key>
+    <string>This app needs accessibility permissions to inspect UI elements of other applications.</string>
+</dict>
+</plist>
