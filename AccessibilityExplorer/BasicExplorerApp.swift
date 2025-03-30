@@ -458,10 +458,15 @@ class ExplorerViewModel: ObservableObject {
         
         processingQueue.async {
             var processedChildren: [UIElement] = []
+            let processingGroup = DispatchGroup()
+            let childrenQueue = DispatchQueue(label: "com.accessibility.childrenQueue")
             
             // Only process a reasonable number to prevent freezing
             for axChild in axChildren.prefix(30) {
-                // Create and process child elements with optimization
+                // Process each child on the queue
+                processingGroup.enter()
+                
+                // Create child element with optimization
                 if let childElement = self.createAndOptimizeElement(
                     axElement: axChild,
                     parent: parentElement
@@ -471,16 +476,58 @@ class ExplorerViewModel: ObservableObject {
                         // For groups, check if they're empty or have only one child
                         self.processGroupElement(childElement) { result in
                             if let optimizedElement = result {
-                                processedChildren.append(optimizedElement)
+                                childrenQueue.async {
+                                    processedChildren.append(optimizedElement)
+                                    processingGroup.leave()
+                                }
+                            } else {
+                                processingGroup.leave()
                             }
                         }
                     } else {
-                        processedChildren.append(childElement)
+                        // For non-group elements, just add to the list
+                        childrenQueue.async {
+                            processedChildren.append(childElement)
+                            processingGroup.leave()
+                        }
                     }
+                } else {
+                    // No element created
+                    processingGroup.leave()
                 }
             }
             
-            completion(processedChildren)
+            // After all children are processed
+            processingGroup.notify(queue: processingQueue) {
+                // Get remaining children without optimization to ensure we don't miss any types
+                let nonGroupChildren = axChildren.prefix(30).compactMap { axChild -> UIElement? in
+                    var roleRef: CFTypeRef?
+                    AXUIElementCopyAttributeValue(axChild, kAXRoleAttribute as CFString, &roleRef)
+                    let role = (roleRef as? String) ?? "Unknown"
+                    
+                    // Create elements for important roles that might have been missed in optimization
+                    let importantRoles = ["Menu", "MenuItem", "MenuBar", "MenuBarItem"]
+                    if importantRoles.contains(role) {
+                        return self.createAndOptimizeElement(axElement: axChild, parent: parentElement)
+                    }
+                    return nil
+                }
+                
+                // Add any important elements that may have been missed
+                processedChildren.append(contentsOf: nonGroupChildren)
+                
+                // Sort by role to group similar elements together
+                let sortedChildren = processedChildren.sorted { 
+                    // Prioritize important UI elements
+                    if $0.role == "MenuBar" && $1.role != "MenuBar" { return true }
+                    if $0.role == "Menu" && $1.role != "Menu" && $1.role != "MenuBar" { return true }
+                    
+                    // Otherwise sort alphabetically by role
+                    return $0.role < $1.role
+                }
+                
+                completion(sortedChildren)
+            }
         }
     }
     
@@ -491,7 +538,8 @@ class ExplorerViewModel: ObservableObject {
         AXUIElementCopyAttributeValue(axElement, kAXRoleAttribute as CFString, &roleRef)
         let role = (roleRef as? String) ?? "Unknown"
         
-        // Skip empty groups with no useful information
+        // Only optimize AXGroup elements - leave all other elements alone
+        // Note: Make sure we only elide truly empty groups with no useful information
         if (role == "AXGroup" || role == "Group") {
             // Check if the group has any children
             var hasChildren = false
@@ -503,12 +551,15 @@ class ExplorerViewModel: ObservableObject {
             
             // Check if the group has any useful attributes
             var hasUsefulAttributes = false
+            
+            // Check for identifier
             var identifierRef: CFTypeRef?
             if AXUIElementCopyAttributeValue(axElement, kAXIdentifierAttribute as CFString, &identifierRef) == .success,
                let identifier = identifierRef as? String, !identifier.isEmpty {
                 hasUsefulAttributes = true
             }
             
+            // Check for title/name
             var titleRef: CFTypeRef?
             if !hasUsefulAttributes && 
                AXUIElementCopyAttributeValue(axElement, kAXTitleAttribute as CFString, &titleRef) == .success,
@@ -516,7 +567,15 @@ class ExplorerViewModel: ObservableObject {
                 hasUsefulAttributes = true
             }
             
-            // Skip empty groups with no children and no useful attributes
+            // Check for description
+            var descRef: CFTypeRef?
+            if !hasUsefulAttributes && 
+               AXUIElementCopyAttributeValue(axElement, kAXDescriptionAttribute as CFString, &descRef) == .success,
+               let desc = descRef as? String, !desc.isEmpty {
+                hasUsefulAttributes = true
+            }
+            
+            // Skip only truly empty groups with no children and no useful attributes
             if !hasChildren && !hasUsefulAttributes {
                 return nil
             }
@@ -633,8 +692,8 @@ class ExplorerViewModel: ObservableObject {
         
         if result == .success, let childrenArray = childrenRef as? [AXUIElement] {
             if childrenArray.isEmpty {
-                // Empty group with no children - skip only if no useful attributes
-                if groupElement.identifier.isEmpty && groupElement.name.isEmpty {
+                // Empty group with no children - skip only if truly useless
+                if groupElement.identifier.isEmpty && groupElement.name.isEmpty && groupElement.help.isEmpty {
                     completion(nil)
                 } else {
                     completion(groupElement)
@@ -642,6 +701,22 @@ class ExplorerViewModel: ObservableObject {
             } else if childrenArray.count == 1 {
                 // Group with single child - optimize by lifting the child
                 let singleAXChild = childrenArray[0]
+                
+                // Get role of child to make sure we don't flatten important containers
+                var childRoleRef: CFTypeRef?
+                AXUIElementCopyAttributeValue(singleAXChild, kAXRoleAttribute as CFString, &childRoleRef)
+                let childRole = (childRoleRef as? String) ?? "Unknown"
+                
+                // Don't optimize if the child is an important UI element that should stay nested
+                // This prevents flattening key menu structures and other important hierarchies
+                let importantRoles = ["MenuBar", "Menu", "MenuItem", "TabGroup", "Table", "List", "Outline"]
+                if importantRoles.contains(childRole) {
+                    // Load children the regular way for important elements
+                    loadRegularChildren(for: groupElement, from: childrenArray) { success in
+                        completion(groupElement)
+                    }
+                    return
+                }
                 
                 // Create the child element
                 if let childElement = createAndOptimizeElement(
@@ -1057,33 +1132,42 @@ struct ElementNodeView: View {
                      (element.enabled ? Color.gray.opacity(0.1) : Color.gray.opacity(0.05)))
                 .overlay(
                     VStack(alignment: .leading, spacing: 1) {
-                        // Primary information: ID if available, otherwise name
-                        if !element.identifier.isEmpty {
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text("id: \(element.identifier)")
+                        // Primary information: Name first, then ID if available
+                        VStack(alignment: .leading, spacing: 1) {
+                            if !element.name.isEmpty {
+                                Text(element.name)
                                     .font(.system(size: 12))
                                     .fontWeight(element.isSelected ? .semibold : .medium)
                                     .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
                                     .lineLimit(1)
                                     .padding(.horizontal, 4)
                                 
-                                // Show name as secondary if different from ID
-                                if !element.name.isEmpty && element.name != element.identifier {
-                                    Text(element.name)
+                                // Show ID as secondary if different from name
+                                if !element.identifier.isEmpty && element.identifier != element.name {
+                                    Text("id: \(element.identifier)")
                                         .font(.system(size: 9))
                                         .foregroundColor(.secondary)
                                         .lineLimit(1)
                                         .padding(.horizontal, 4)
                                 }
+                            } else if !element.identifier.isEmpty {
+                                // Use ID if no name
+                                Text("id: \(element.identifier)")
+                                    .font(.system(size: 12))
+                                    .fontWeight(element.isSelected ? .semibold : .medium)
+                                    .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 4)
+                            } else {
+                                // Fall back to generic label
+                                Text("(Unnamed Button)")
+                                    .font(.system(size: 12))
+                                    .fontWeight(element.isSelected ? .semibold : .regular)
+                                    .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 4)
+                                    .italic()
                             }
-                        } else {
-                            // Fall back to name
-                            Text(element.name.isEmpty ? "(Unnamed Button)" : element.name)
-                                .font(.system(size: 12))
-                                .fontWeight(element.isSelected ? .semibold : .regular)
-                                .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
-                                .lineLimit(1)
-                                .padding(.horizontal, 4)
                         }
                     }
                 )
@@ -1149,9 +1233,24 @@ struct ElementNodeView: View {
             
             // Text field mock
             VStack(alignment: .leading, spacing: 1) {
-                // Primary information: ID and content
-                if !element.identifier.isEmpty {
-                    // Show ID as primary information
+                // Primary information: name/title first, then ID
+                if !element.name.isEmpty {
+                    // Show name/title as primary information
+                    Text(element.name)
+                        .font(.system(size: 12))
+                        .fontWeight(element.isSelected ? .semibold : .medium)
+                        .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
+                        .lineLimit(1)
+                    
+                    // Show ID as secondary if different from name
+                    if !element.identifier.isEmpty && element.identifier != element.name {
+                        Text("id: \(element.identifier)")
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                } else if !element.identifier.isEmpty {
+                    // Show ID if no name is available
                     Text("id: \(element.identifier)")
                         .font(.system(size: 12))
                         .fontWeight(element.isSelected ? .semibold : .medium)
@@ -1271,28 +1370,36 @@ struct ElementNodeView: View {
             }
             
             VStack(alignment: .leading, spacing: 1) {
-                // Primary information: ID if available, otherwise name
-                if !element.identifier.isEmpty {
-                    Text("id: \(element.identifier)")
+                // Primary information: Name first, then ID
+                if !element.name.isEmpty {
+                    Text(element.name)
                         .font(.system(size: 12))
                         .fontWeight(element.isSelected ? .semibold : .medium)
                         .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
                         .lineLimit(1)
                     
-                    // Show name as secondary if different from ID
-                    if !element.name.isEmpty && element.name != element.identifier {
-                        Text(element.name)
+                    // Show ID as secondary if different from name
+                    if !element.identifier.isEmpty && element.identifier != element.name {
+                        Text("id: \(element.identifier)")
                             .font(.system(size: 9))
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                     }
+                } else if !element.identifier.isEmpty {
+                    // Use ID if no name
+                    Text("id: \(element.identifier)")
+                        .font(.system(size: 12))
+                        .fontWeight(element.isSelected ? .semibold : .medium)
+                        .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
+                        .lineLimit(1)
                 } else {
-                    // Fall back to name
-                    Text(element.name.isEmpty ? "(Unnamed Checkbox)" : element.name)
+                    // Fall back to generic label
+                    Text("(Unnamed Checkbox)")
                         .font(.system(size: 12))
                         .fontWeight(element.isSelected ? .semibold : .regular)
                         .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
                         .lineLimit(1)
+                        .italic()
                 }
             }
             
@@ -1671,24 +1778,31 @@ struct ElementNodeView: View {
             
             // Element details
             VStack(alignment: .leading, spacing: 1) {
-                // Primary information: Identifier if available, otherwise name
-                if !element.identifier.isEmpty {
-                    Text("id: \(element.identifier)")
+                // Primary information: Name first, then identifier
+                if !element.name.isEmpty {
+                    Text(element.name)
                         .font(.system(size: 12))
                         .fontWeight(element.isSelected ? .bold : .medium)
                         .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
                         .lineLimit(1)
                     
-                    // Show name as secondary if both name and id exist and are different
-                    if !element.name.isEmpty && element.name != element.identifier {
-                        Text(element.name)
+                    // Show id as secondary if it exists and is different from name
+                    if !element.identifier.isEmpty && element.identifier != element.name {
+                        Text("id: \(element.identifier)")
                             .font(.system(size: 9))
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                     }
+                } else if !element.identifier.isEmpty {
+                    // Use identifier if no name
+                    Text("id: \(element.identifier)")
+                        .font(.system(size: 12))
+                        .fontWeight(element.isSelected ? .bold : .regular)
+                        .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
+                        .lineLimit(1)
                 } else {
-                    // Fall back to name if no id
-                    Text(element.name.isEmpty ? "(\(element.role))" : element.name)
+                    // Fall back to role if no name or id
+                    Text("(\(element.role))")
                         .font(.system(size: 12))
                         .fontWeight(element.isSelected ? .bold : .regular)
                         .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
