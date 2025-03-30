@@ -382,7 +382,20 @@ class ExplorerViewModel: ObservableObject {
                    let actionNames = actionsArrayRef as? [String] {
                     if !actionNames.isEmpty {
                         properties["Available Actions"] = actionNames.joined(separator: ", ")
+                        
+                        // Update the element's available actions - sometimes this might have been missed during initialization
+                        if element.availableActions.isEmpty {
+                            element.availableActions = actionNames
+                        }
                     }
+                }
+            }
+            
+            // Get and display all supported user actions
+            if let self = self {
+                let supportedActions = self.actionsForElement(element).map { $0.0 }
+                if !supportedActions.isEmpty {
+                    properties["Supported User Actions"] = supportedActions.joined(separator: ", ")
                 }
             }
             
@@ -2366,38 +2379,12 @@ struct ActionsView: View {
     private func performAction(_ action: String, on element: UIElement) {
         isPerformingAction = true
         
+        // Handle special cases that require custom UI or special handling
         switch action {
-        case "Press":
-            performPressAction(on: element) { success, message in
-                DispatchQueue.main.async {
-                    isPerformingAction = false
-                    actionResult = (success, message ?? "Button pressed successfully")
-                    showingActionResult = true
-                    
-                    // Refresh properties after action
-                    if success {
-                        viewModel.loadProperties(for: element)
-                    }
-                }
-            }
-            
-        case "Focus":
-            performFocusAction(on: element) { success, message in
-                DispatchQueue.main.async {
-                    isPerformingAction = false
-                    actionResult = (success, message ?? "Element focused successfully")
-                    showingActionResult = true
-                    
-                    // Refresh properties after action
-                    if success {
-                        viewModel.loadProperties(for: element)
-                    }
-                }
-            }
-            
         case "Enter Text":
             isPerformingAction = false
             showingTextInput = true
+            return
             
         case "Set Value":
             isPerformingAction = false
@@ -2415,6 +2402,7 @@ struct ActionsView: View {
             }
             
             showingValueEditor = true
+            return
             
         case "Set Position":
             isPerformingAction = false
@@ -2432,6 +2420,28 @@ struct ActionsView: View {
             }
             
             showingPositionEditor = true
+            return
+            
+        case "Inspect":
+            isPerformingAction = false
+            actionResult = (true, "Element properties displayed")
+            showingActionResult = true
+            return
+            
+        case "Focus":
+            performFocusAction(on: element) { success, message in
+                DispatchQueue.main.async {
+                    isPerformingAction = false
+                    actionResult = (success, message ?? "Element focused successfully")
+                    showingActionResult = true
+                    
+                    // Refresh properties after action
+                    if success {
+                        viewModel.loadProperties(for: element)
+                    }
+                }
+            }
+            return
             
         case "Toggle":
             performToggleAction(on: element) { success, message in
@@ -2446,12 +2456,13 @@ struct ActionsView: View {
                     }
                 }
             }
-            
-        case "Increment":
-            performGenericAction(on: element, action: "AXIncrement") { success, message in
+            return
+        
+        case "Press":
+            performPressAction(on: element) { success, message in
                 DispatchQueue.main.async {
                     isPerformingAction = false
-                    actionResult = (success, message ?? "Value incremented successfully")
+                    actionResult = (success, message ?? "Button pressed successfully")
                     showingActionResult = true
                     
                     // Refresh properties after action
@@ -2460,175 +2471,163 @@ struct ActionsView: View {
                     }
                 }
             }
-            
-        case "Decrement":
-            performGenericAction(on: element, action: "AXDecrement") { success, message in
-                DispatchQueue.main.async {
-                    isPerformingAction = false
-                    actionResult = (success, message ?? "Value decremented successfully")
-                    showingActionResult = true
-                    
-                    // Refresh properties after action
-                    if success {
-                        viewModel.loadProperties(for: element)
-                    }
-                }
-            }
-            
-        case "Minimize":
-            performGenericAction(on: element, action: "AXMinimize") { success, message in
-                DispatchQueue.main.async {
-                    isPerformingAction = false
-                    actionResult = (success, message ?? "Window minimized successfully")
-                    showingActionResult = true
-                }
-            }
-            
-        case "Close":
-            performGenericAction(on: element, action: "AXClose") { success, message in
-                DispatchQueue.main.async {
-                    isPerformingAction = false
-                    actionResult = (success, message ?? "Window closed successfully")
-                    showingActionResult = true
-                }
-            }
-            
-        case "Raise":
-            performGenericAction(on: element, action: "AXRaise") { success, message in
-                DispatchQueue.main.async {
-                    isPerformingAction = false
-                    actionResult = (success, message ?? "Window brought to front successfully")
-                    showingActionResult = true
-                    
-                    // Refresh properties after action
-                    if success {
-                        viewModel.loadProperties(for: element)
-                    }
-                }
-            }
-            
-        case "Show Menu":
-            performGenericAction(on: element, action: "AXShowMenu") { success, message in
-                DispatchQueue.main.async {
-                    isPerformingAction = false
-                    actionResult = (success, message ?? "Menu shown successfully")
-                    showingActionResult = true
-                }
-            }
-            
-        case "Inspect":
-            isPerformingAction = false
-            actionResult = (true, "Element properties displayed")
-            showingActionResult = true
-            
+            return
+        }
+        
+        // For all other actions, determine the AX action name and use the generic handler
+        var axActionName = ""
+        
+        // Map user-friendly action names to their AX equivalents
+        switch action {
+        case "Increment": axActionName = "AXIncrement"
+        case "Decrement": axActionName = "AXDecrement"
+        case "Minimize": axActionName = "AXMinimize"
+        case "Close": axActionName = "AXClose"
+        case "Raise": axActionName = "AXRaise"
+        case "Show Menu": axActionName = "AXShowMenu"
+        case "Pick": axActionName = "AXPick"
+        case "Cancel": axActionName = "AXCancel"
+        case "Confirm": axActionName = "AXConfirm"
+        case "Show Alternate UI": axActionName = "AXShowAlternateUI"
+        case "Show Default UI": axActionName = "AXShowDefaultUI"
+        case "Zoom": axActionName = "AXZoomWindow"
+        case "Scroll To Visible": axActionName = "AXScrollToVisible"
+        case "Check": axActionName = "AXPress" // For checkboxes
+        case "Uncheck": axActionName = "AXPress" // For checkboxes
         default:
-            isPerformingAction = false
-            actionResult = (false, "Unknown action: \(action)")
-            showingActionResult = true
+            // For any other action, try to convert it to AX format if needed
+            if !action.hasPrefix("AX") {
+                // Remove spaces and make first letter uppercase for remaining chars
+                let components = action.components(separatedBy: " ")
+                if components.count > 1 {
+                    // Convert "Show Menu" to "ShowMenu"
+                    var formattedAction = components[0].lowercased()
+                    for i in 1..<components.count {
+                        formattedAction += components[i].prefix(1).uppercased() + components[i].dropFirst().lowercased()
+                    }
+                    axActionName = "AX" + formattedAction.prefix(1).uppercased() + formattedAction.dropFirst()
+                } else {
+                    // Just prefix with AX
+                    axActionName = "AX" + action.prefix(1).uppercased() + action.dropFirst()
+                }
+            } else {
+                // Already in AX format
+                axActionName = action
+            }
+        }
+        
+        // Get a user-friendly success message
+        let successMessage = "Action '\(action)' performed successfully"
+        
+        // Perform the action generically
+        performGenericAction(on: element, action: axActionName) { success, message in
+            DispatchQueue.main.async {
+                isPerformingAction = false
+                actionResult = (success, message ?? successMessage)
+                showingActionResult = true
+                
+                // Refresh properties after action
+                if success {
+                    viewModel.loadProperties(for: element)
+                }
+            }
         }
     }
     
     private func actionsForElement(_ element: UIElement) -> [(String, String)] {
-        // Base actions on role
         var actions: [(String, String)] = []
         
-        switch element.role {
-        case "Button":
-            actions = [
-                ("Press", "Simulate pressing this button"),
-                ("Focus", "Set keyboard focus to this button")
-            ]
-            
-        case "TextField", "SearchField", "TextArea":
-            actions = [
-                ("Focus", "Set focus to this field"),
-                ("Enter Text", "Insert text into this field")
-            ]
-            
-        case "CheckBox", "CheckBoxButton":
-            actions = [
-                ("Toggle", "Toggle checkbox state"),
-                ("Focus", "Set focus to this checkbox")
-            ]
-            
-        case "Window":
-            actions = [
-                ("Raise", "Bring window to front"),
-                ("Minimize", "Minimize this window"),
-                ("Close", "Close this window"),
-                ("Set Position", "Move window to a specific position")
-            ]
-            
-        case "RadioButton":
-            actions = [
-                ("Press", "Select this radio button"),
-                ("Focus", "Set focus to this radio button")
-            ]
-            
-        case "MenuItem", "Menu":
-            actions = [
-                ("Press", "Select this menu item"),
-                ("Show Menu", "Display menu contents"),
-                ("Focus", "Set focus to this menu item")
-            ]
-            
-        case "Slider", "ScrollBar", "ValueIndicator":
-            actions = [
-                ("Set Value", "Set a specific value"),
-                ("Increment", "Increase value"),
-                ("Decrement", "Decrease value"),
-                ("Focus", "Set focus to this control")
-            ]
-            
-        case "Stepper", "IncDecButton":
-            actions = [
-                ("Increment", "Increase value"),
-                ("Decrement", "Decrease value"),
-                ("Focus", "Set focus to this control")
-            ]
-            
-        case "TabGroup", "TabList":
-            actions = [
-                ("Focus", "Set focus to tab group")
-            ]
-            
-        case "Toolbar":
-            actions = [
-                ("Focus", "Set focus to toolbar")
-            ]
-            
-        case "ScrollArea":
-            actions = [
-                ("Focus", "Set focus to scroll area")
-            ]
-            
-        case "Application":
-            actions = [
-                ("Inspect", "View detailed information about this application")
-            ]
-            
-        default:
-            // Check if the element has specific capabilities we can use
-            if isActionSupported("AXPress", on: element) {
-                actions.append(("Press", "Activate this element"))
+        // First, get a list of all actions supported by the element
+        // This ensures we don't miss any actions provided by the accessibility API
+        if let axElement = element.axElement, !element.availableActions.isEmpty {
+            // Add all available actions from the element
+            for actionName in element.availableActions {
+                // Map AX action names to user-friendly names and descriptions
+                switch actionName {
+                case "AXPress":
+                    actions.append(("Press", "Activate this element"))
+                case "AXShowMenu":
+                    actions.append(("Show Menu", "Display context menu for this element"))
+                case "AXPick":
+                    actions.append(("Pick", "Select this item"))
+                case "AXCancel":
+                    actions.append(("Cancel", "Cancel current operation or dialog"))
+                case "AXConfirm":
+                    actions.append(("Confirm", "Confirm current operation or dialog"))
+                case "AXDecrement":
+                    actions.append(("Decrement", "Decrease value"))
+                case "AXIncrement":
+                    actions.append(("Increment", "Increase value"))
+                case "AXRaise":
+                    actions.append(("Raise", "Bring window to front"))
+                case "AXShowAlternateUI":
+                    actions.append(("Show Alternate UI", "Display alternate user interface"))
+                case "AXShowDefaultUI":
+                    actions.append(("Show Default UI", "Display default user interface"))
+                case "AXMinimize":
+                    actions.append(("Minimize", "Minimize this window"))
+                case "AXZoomWindow":
+                    actions.append(("Zoom", "Zoom this window"))
+                case "AXClose":
+                    actions.append(("Close", "Close this window or item"))
+                default:
+                    // For any other action not explicitly mapped, create a generic action name
+                    let actionDisplayName = actionName.replacingOccurrences(of: "AX", with: "")
+                    actions.append((actionDisplayName, "Perform \(actionDisplayName) action"))
+                }
             }
-            
-            if isAttributeSettable(kAXFocusedAttribute as String, on: element) {
+        }
+        
+        // Next, add actions based on settable attributes
+        if isAttributeSettable(kAXFocusedAttribute as String, on: element) {
+            // Only add if not already added
+            if !actions.contains(where: { $0.0 == "Focus" }) {
                 actions.append(("Focus", "Set focus to this element"))
             }
-            
-            if isAttributeSettable(kAXValueAttribute as String, on: element) {
+        }
+        
+        if isAttributeSettable(kAXValueAttribute as String, on: element) {
+            if !actions.contains(where: { $0.0 == "Set Value" }) {
                 actions.append(("Set Value", "Change the value of this element"))
             }
             
-            if isAttributeSettable(kAXPositionAttribute as String, on: element) {
+            // For text fields, add text entry action
+            if ["TextField", "SearchField", "TextArea"].contains(element.role) {
+                if !actions.contains(where: { $0.0 == "Enter Text" }) {
+                    actions.append(("Enter Text", "Insert text into this field"))
+                }
+            }
+        }
+        
+        if isAttributeSettable(kAXPositionAttribute as String, on: element) {
+            if !actions.contains(where: { $0.0 == "Set Position" }) {
                 actions.append(("Set Position", "Move this element"))
             }
-            
-            // If we still have no actions, add a generic inspect action
-            if actions.isEmpty {
-                actions = [("Inspect", "View detailed information about this element")]
+        }
+        
+        // Special actions for specific roles, if not already added through available actions
+        switch element.role {
+        case "CheckBox", "CheckBoxButton":
+            if !actions.contains(where: { $0.0 == "Toggle" }) {
+                actions.append(("Toggle", "Toggle checkbox state"))
             }
+            
+        case "TabGroup", "TabList", "Toolbar", "ScrollArea":
+            // These are already handled by attributes or available actions
+            break
+            
+        case "Application":
+            // Applications get the inspect action if nothing else is available
+            if actions.isEmpty {
+                actions.append(("Inspect", "View detailed information about this application"))
+            }
+        default:
+            break
+        }
+        
+        // If we still have no actions, add a generic inspect action
+        if actions.isEmpty {
+            actions = [("Inspect", "View detailed information about this element")]
         }
         
         return actions
@@ -2649,7 +2648,32 @@ struct ActionsView: View {
         case "Raise": return "square.stack.3d.up"
         case "Show Menu": return "list.bullet"
         case "Inspect": return "magnifyingglass"
-        default: return "arrow.right"
+        case "Pick": return "hand.point.up.left"
+        case "Cancel": return "xmark.circle"
+        case "Confirm": return "checkmark.circle"
+        case "Show Alternate UI": return "rectangle.3.offgrid"
+        case "Show Default UI": return "rectangle.grid.1x2"
+        case "Zoom": return "arrow.up.left.and.arrow.down.right.square"
+        // Additional standard actions
+        case "Scroll To Visible": return "arrow.up.and.down.and.arrow.left.and.right"
+        case "Scroll To", "ScrollTo": return "arrow.up.and.down"
+        case "Show Hover UI", "ShowHoverUI": return "rectangle.on.rectangle"
+        case "Replace": return "arrow.2.squarepath"
+        case "Check", "Uncheck": return "checkmark.square"
+        case "PageLeft", "PageUp", "PageDown", "PageRight": return "arrow.left.and.right"
+        // Generic fallbacks for other action types
+        default:
+            if action.contains("Page") {
+                return "doc.text"
+            } else if action.contains("Scroll") {
+                return "arrow.up.and.down"
+            } else if action.contains("Show") {
+                return "eye"
+            } else if action.contains("Select") {
+                return "checkmark.circle"
+            } else {
+                return "arrow.right"
+            }
         }
     }
     
