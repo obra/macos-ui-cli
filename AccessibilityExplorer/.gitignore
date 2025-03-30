@@ -1,0 +1,7 @@
+# Build artifacts
+AccessibilityExplorerApp
+*.o
+*.swiftmodule
+
+# macOS
+.DS_Store
