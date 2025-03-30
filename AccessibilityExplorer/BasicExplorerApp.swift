@@ -28,10 +28,10 @@ struct AppInfo: Identifiable, Hashable {
 /// Model for a UI element node
 class UIElement: Identifiable, ObservableObject {
     let id = UUID()
-    let name: String
+    var name: String
     let role: String
     let appInfo: AppInfo
-    let description: String
+    var description: String
     
     // Reference to the AXUIElement
     let axElement: AXUIElement?
@@ -423,80 +423,16 @@ class ExplorerViewModel: ObservableObject {
                 let result = AXUIElementCopyAttributeValue(axElement, kAXChildrenAttribute as CFString, &childrenRef)
                 
                 if result == .success, let childrenArray = childrenRef as? [AXUIElement] {
-                    var newChildren: [UIElement] = []
-                    
-                    // Only get a reasonable number to prevent freezing
-                    for child in childrenArray.prefix(20) {
-                        var roleRef: CFTypeRef?
-                        AXUIElementCopyAttributeValue(child, kAXRoleAttribute as CFString, &roleRef)
-                        let role = (roleRef as? String) ?? "Unknown"
-                        
-                        var titleRef: CFTypeRef?
-                        AXUIElementCopyAttributeValue(child, kAXTitleAttribute as CFString, &titleRef)
-                        var name = (titleRef as? String) ?? role
-                        
-                        // Try description if title is empty
-                        if name.isEmpty || name == role {
-                            var descRef: CFTypeRef?
-                            AXUIElementCopyAttributeValue(child, kAXDescriptionAttribute as CFString, &descRef)
-                            if let desc = descRef as? String, !desc.isEmpty {
-                                name = desc
+                    // Process children with smart hierarchy optimization
+                    self.processChildren(childrenArray, parentElement: element) { processedChildren in
+                        DispatchQueue.main.async {
+                            element.children = processedChildren
+                            element.isLoading = false
+                            
+                            if !hasCompleted {
+                                hasCompleted = true
+                                completion()
                             }
-                        }
-                        
-                        // Create child element with enhanced attributes
-                        let childElement = UIElement(
-                            name: name,
-                            role: role,
-                            appInfo: element.appInfo,
-                            description: "\(role) element",
-                            parent: element,
-                            axElement: child
-                        )
-                        
-                        // Try to get additional attributes to enhance the tree view
-                        var valueRef: CFTypeRef?
-                        
-                        // Try to get a more informative description
-                        if valueRef == nil && 
-                           AXUIElementCopyAttributeValue(child, kAXHelpAttribute as CFString, &valueRef) == .success,
-                           let helpText = valueRef as? String, !helpText.isEmpty {
-                            childElement.help = helpText
-                        }
-                        
-                        // For text elements, try to get value
-                        if (role == "TextField" || role == "TextArea" || role == "StaticText") {
-                            valueRef = nil
-                            if AXUIElementCopyAttributeValue(child, kAXValueAttribute as CFString, &valueRef) == .success,
-                               let textValue = valueRef as? String {
-                                childElement.value = textValue
-                            }
-                        }
-                        
-                        // For checkboxes, radio buttons, try to get checked state
-                        if (role == "CheckBox" || role == "RadioButton") {
-                            valueRef = nil
-                            if AXUIElementCopyAttributeValue(child, kAXValueAttribute as CFString, &valueRef) == .success {
-                                if let boolValue = valueRef as? Bool {
-                                    childElement.value = boolValue ? "checked" : "unchecked"
-                                } else if let intValue = valueRef as? Int {
-                                    childElement.value = intValue == 1 ? "checked" : "unchecked"
-                                }
-                            }
-                        }
-                        
-                        // Add to new children list
-                        newChildren.append(childElement)
-                    }
-                    
-                    // Update element on main thread
-                    DispatchQueue.main.async {
-                        element.children = newChildren
-                        element.isLoading = false
-                        
-                        if !hasCompleted {
-                            hasCompleted = true
-                            completion()
                         }
                     }
                 } else {
@@ -513,6 +449,257 @@ class ExplorerViewModel: ObservableObject {
             // No AX element available
             completion()
         }
+    }
+    
+    /// Process children with smart hierarchy optimization
+    private func processChildren(_ axChildren: [AXUIElement], parentElement: UIElement, completion: @escaping ([UIElement]) -> Void) {
+        // Create a processing queue to handle the children
+        let processingQueue = DispatchQueue(label: "com.accessibility.processQueue", qos: .userInitiated)
+        
+        processingQueue.async {
+            var processedChildren: [UIElement] = []
+            
+            // Only process a reasonable number to prevent freezing
+            for axChild in axChildren.prefix(30) {
+                // Create and process child elements with optimization
+                if let childElement = self.createAndOptimizeElement(
+                    axElement: axChild,
+                    parent: parentElement
+                ) {
+                    // Apply optimization to handle AXGroup elements
+                    if childElement.role == "AXGroup" || childElement.role == "Group" {
+                        // For groups, check if they're empty or have only one child
+                        self.processGroupElement(childElement) { result in
+                            if let optimizedElement = result {
+                                processedChildren.append(optimizedElement)
+                            }
+                        }
+                    } else {
+                        processedChildren.append(childElement)
+                    }
+                }
+            }
+            
+            completion(processedChildren)
+        }
+    }
+    
+    /// Create an element with basic attribute loading
+    private func createAndOptimizeElement(axElement: AXUIElement, parent: UIElement) -> UIElement? {
+        // Get role
+        var roleRef: CFTypeRef?
+        AXUIElementCopyAttributeValue(axElement, kAXRoleAttribute as CFString, &roleRef)
+        let role = (roleRef as? String) ?? "Unknown"
+        
+        // Skip empty groups with no useful information
+        if (role == "AXGroup" || role == "Group") {
+            // Check if the group has any children
+            var hasChildren = false
+            var childrenRef: CFTypeRef?
+            if AXUIElementCopyAttributeValue(axElement, kAXChildrenAttribute as CFString, &childrenRef) == .success,
+               let childArray = childrenRef as? [AXUIElement], !childArray.isEmpty {
+                hasChildren = true
+            }
+            
+            // Check if the group has any useful attributes
+            var hasUsefulAttributes = false
+            var identifierRef: CFTypeRef?
+            if AXUIElementCopyAttributeValue(axElement, kAXIdentifierAttribute as CFString, &identifierRef) == .success,
+               let identifier = identifierRef as? String, !identifier.isEmpty {
+                hasUsefulAttributes = true
+            }
+            
+            var titleRef: CFTypeRef?
+            if !hasUsefulAttributes && 
+               AXUIElementCopyAttributeValue(axElement, kAXTitleAttribute as CFString, &titleRef) == .success,
+               let title = titleRef as? String, !title.isEmpty {
+                hasUsefulAttributes = true
+            }
+            
+            // Skip empty groups with no children and no useful attributes
+            if !hasChildren && !hasUsefulAttributes {
+                return nil
+            }
+        }
+        
+        // Get name/title
+        var titleRef: CFTypeRef?
+        AXUIElementCopyAttributeValue(axElement, kAXTitleAttribute as CFString, &titleRef)
+        var name = (titleRef as? String) ?? ""
+        
+        // Try description if title is empty
+        if name.isEmpty {
+            var descRef: CFTypeRef?
+            AXUIElementCopyAttributeValue(axElement, kAXDescriptionAttribute as CFString, &descRef)
+            if let desc = descRef as? String, !desc.isEmpty {
+                name = desc
+            }
+        }
+        
+        // If still empty, try value for text elements
+        if name.isEmpty {
+            var valueRef: CFTypeRef?
+            if AXUIElementCopyAttributeValue(axElement, kAXValueAttribute as CFString, &valueRef) == .success,
+               let value = valueRef as? String, !value.isEmpty {
+                name = value
+            }
+        }
+        
+        // If still empty, use role as fallback
+        if name.isEmpty {
+            name = role
+        }
+        
+        // Create element with basic info
+        let element = UIElement(
+            name: name,
+            role: role,
+            appInfo: parent.appInfo,
+            description: "\(role) element",
+            parent: parent,
+            axElement: axElement
+        )
+        
+        // Load additional properties for enhanced visualization
+        loadAdditionalProperties(for: element)
+        
+        return element
+    }
+    
+    /// Load additional properties for an element
+    private func loadAdditionalProperties(for element: UIElement) {
+        guard let axElement = element.axElement else { return }
+        
+        // Load value for form elements
+        if element.role == "TextField" || element.role == "TextArea" || element.role == "StaticText" ||
+           element.role == "CheckBox" || element.role == "RadioButton" {
+            var valueRef: CFTypeRef?
+            if AXUIElementCopyAttributeValue(axElement, kAXValueAttribute as CFString, &valueRef) == .success {
+                if let stringValue = valueRef as? String {
+                    element.value = stringValue
+                } else if let boolValue = valueRef as? Bool {
+                    element.value = boolValue ? "checked" : "unchecked"
+                } else if let numberValue = valueRef as? NSNumber {
+                    element.value = numberValue.stringValue
+                }
+            }
+        }
+        
+        // Load help text
+        var helpRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(axElement, kAXHelpAttribute as CFString, &helpRef) == .success,
+           let helpText = helpRef as? String {
+            element.help = helpText
+        }
+        
+        // Load placeholder value
+        var placeholderRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(axElement, kAXPlaceholderValueAttribute as CFString, &placeholderRef) == .success,
+           let placeholder = placeholderRef as? String {
+            element.placeholderValue = placeholder
+        }
+        
+        // Load enabled state
+        var enabledRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(axElement, kAXEnabledAttribute as CFString, &enabledRef) == .success,
+           let enabled = enabledRef as? Bool {
+            element.enabled = enabled
+        }
+        
+        // Load other states
+        var focusedRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(axElement, kAXFocusedAttribute as CFString, &focusedRef) == .success,
+           let focused = focusedRef as? Bool {
+            element.focused = focused
+        }
+        
+        var selectedRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(axElement, kAXSelectedAttribute as CFString, &selectedRef) == .success,
+           let selected = selectedRef as? Bool {
+            element.selected = selected
+        }
+    }
+    
+    /// Process an AXGroup element with hierarchy optimization
+    private func processGroupElement(_ groupElement: UIElement, completion: @escaping (UIElement?) -> Void) {
+        guard let axElement = groupElement.axElement else {
+            completion(groupElement)
+            return
+        }
+        
+        // Check if the group has children
+        var childrenRef: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(axElement, kAXChildrenAttribute as CFString, &childrenRef)
+        
+        if result == .success, let childrenArray = childrenRef as? [AXUIElement] {
+            if childrenArray.isEmpty {
+                // Empty group with no children - skip only if no useful attributes
+                if groupElement.identifier.isEmpty && groupElement.name.isEmpty {
+                    completion(nil)
+                } else {
+                    completion(groupElement)
+                }
+            } else if childrenArray.count == 1 {
+                // Group with single child - optimize by lifting the child
+                let singleAXChild = childrenArray[0]
+                
+                // Create the child element
+                if let childElement = createAndOptimizeElement(
+                    axElement: singleAXChild,
+                    parent: groupElement.parent ?? groupElement) {
+                    
+                    // Preserve group's attributes on the child if they're not already set
+                    if !groupElement.identifier.isEmpty && childElement.identifier.isEmpty {
+                        childElement.identifier = groupElement.identifier
+                    }
+                    
+                    if !groupElement.name.isEmpty && childElement.name.isEmpty {
+                        childElement.name = groupElement.name
+                    }
+                    
+                    if !groupElement.help.isEmpty && childElement.help.isEmpty {
+                        childElement.help = groupElement.help
+                    }
+                    
+                    // Set the proper parent
+                    childElement.parent = groupElement.parent
+                    
+                    // Return the optimized child instead of the group
+                    completion(childElement)
+                } else {
+                    // If child creation failed, use the original group
+                    completion(groupElement)
+                }
+            } else {
+                // Group with multiple children - keep as is
+                // Load the children for this group
+                loadRegularChildren(for: groupElement, from: childrenArray) { success in
+                    completion(groupElement)
+                }
+            }
+        } else {
+            // Couldn't get children - keep as is
+            completion(groupElement)
+        }
+    }
+    
+    /// Load children without hierarchy optimization
+    private func loadRegularChildren(for element: UIElement, from axChildren: [AXUIElement], completion: @escaping (Bool) -> Void) {
+        // Process a reasonable number of children
+        let childrenToProcess = axChildren.prefix(20)
+        var newChildren: [UIElement] = []
+        
+        for axChild in childrenToProcess {
+            if let childElement = createAndOptimizeElement(
+                axElement: axChild,
+                parent: element
+            ) {
+                element.addChild(childElement)
+                newChildren.append(childElement)
+            }
+        }
+        
+        completion(!newChildren.isEmpty)
     }
     
     func checkAccess() -> Bool {
