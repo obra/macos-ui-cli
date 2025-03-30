@@ -398,10 +398,9 @@ class SafeAccessibility {
                         axElement: child
                     )
                     
-                    // Check if it has children
+                    // Check if it has children (for future use)
                     var subChildrenRef: CFTypeRef?
-                    let hasChildren = AXUIElementCopyAttributeValue(child, kAXChildrenAttribute as CFString, &subChildrenRef) == .success &&
-                                        (subChildrenRef as? [AXUIElement])?.isEmpty == false
+                    _ = AXUIElementCopyAttributeValue(child, kAXChildrenAttribute as CFString, &subChildrenRef)
                     
                     // Add to new children list
                     newChildren.append(childElement)
@@ -1269,7 +1268,6 @@ struct ElementNodeView: View {
         }
     }
 }
-}
 
 /// Properties display view
 struct ElementDetailsView: View {
@@ -1392,7 +1390,7 @@ struct ElementHeader: View {
                     .foregroundColor(.secondary)
                 
                 // Show path (breadcrumbs)
-                if let parent = element.parent {
+                if element.parent != nil {
                     Text("\(breadcrumbPath(for: element))")
                         .font(.caption)
                         .foregroundColor(.secondary)
