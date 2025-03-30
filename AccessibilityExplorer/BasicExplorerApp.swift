@@ -870,19 +870,31 @@ struct ElementNodeView: View {
                      (element.enabled ? Color.gray.opacity(0.1) : Color.gray.opacity(0.05)))
                 .overlay(
                     VStack(alignment: .leading, spacing: 1) {
-                        // Button title
-                        Text(element.name.isEmpty ? "(Unnamed Button)" : element.name)
-                            .font(.system(size: 12))
-                            .fontWeight(element.isSelected ? .semibold : .regular)
-                            .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
-                            .lineLimit(1)
-                            .padding(.horizontal, 4)
-                        
-                        // Show identifier if available
+                        // Primary information: ID if available, otherwise name
                         if !element.identifier.isEmpty {
-                            Text("id: \(element.identifier)")
-                                .font(.system(size: 8))
-                                .foregroundColor(.secondary)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("id: \(element.identifier)")
+                                    .font(.system(size: 12))
+                                    .fontWeight(element.isSelected ? .semibold : .medium)
+                                    .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 4)
+                                
+                                // Show name as secondary if different from ID
+                                if !element.name.isEmpty && element.name != element.identifier {
+                                    Text(element.name)
+                                        .font(.system(size: 9))
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                        .padding(.horizontal, 4)
+                                }
+                            }
+                        } else {
+                            // Fall back to name
+                            Text(element.name.isEmpty ? "(Unnamed Button)" : element.name)
+                                .font(.system(size: 12))
+                                .fontWeight(element.isSelected ? .semibold : .regular)
+                                .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
                                 .lineLimit(1)
                                 .padding(.horizontal, 4)
                         }
@@ -950,7 +962,17 @@ struct ElementNodeView: View {
             
             // Text field mock
             VStack(alignment: .leading, spacing: 1) {
-                // Display placeholder or value
+                // Primary information: ID and content
+                if !element.identifier.isEmpty {
+                    // Show ID as primary information
+                    Text("id: \(element.identifier)")
+                        .font(.system(size: 12))
+                        .fontWeight(element.isSelected ? .semibold : .medium)
+                        .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
+                        .lineLimit(1)
+                }
+                
+                // Display field content or placeholder
                 RoundedRectangle(cornerRadius: 4)
                     .stroke(element.isSelected ? Color.blue : element.enabled ? Color.gray : Color.gray.opacity(0.5), lineWidth: 1)
                     .background(element.enabled ? Color.white.opacity(0.5) : Color.gray.opacity(0.1))
@@ -973,25 +995,32 @@ struct ElementNodeView: View {
                                     .padding(.leading, 4)
                                     .lineLimit(1)
                                     .italic()
-                            } else {
-                                // Show name as fallback
+                            } else if element.identifier.isEmpty {
+                                // Only show name here if no ID was shown above
                                 Text(element.name.isEmpty ? "(Unnamed Field)" : element.name)
                                     .font(.system(size: 11))
                                     .foregroundColor(element.isSelected ? .blue : .gray)
                                     .padding(.leading, 4)
                                     .lineLimit(1)
+                            } else if !element.name.isEmpty && element.name != element.identifier {
+                                // Show name as secondary info if different from ID
+                                Text(element.name)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.gray)
+                                    .padding(.leading, 4)
+                                    .lineLimit(1)
+                            } else {
+                                // Show a placeholder
+                                Text("(Empty)")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.gray.opacity(0.6))
+                                    .padding(.leading, 4)
+                                    .lineLimit(1)
+                                    .italic()
                             }
                             Spacer()
                         }
                     )
-                
-                // Show identifier if available
-                if !element.identifier.isEmpty {
-                    Text("id: \(element.identifier)")
-                        .font(.system(size: 8))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
             }
             
             // Role and state info
@@ -1055,18 +1084,27 @@ struct ElementNodeView: View {
             }
             
             VStack(alignment: .leading, spacing: 1) {
-                // Checkbox label
-                Text(element.name.isEmpty ? "(Unnamed Checkbox)" : element.name)
-                    .font(.system(size: 12))
-                    .fontWeight(element.isSelected ? .semibold : .regular)
-                    .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
-                    .lineLimit(1)
-                
-                // Show identifier if available
+                // Primary information: ID if available, otherwise name
                 if !element.identifier.isEmpty {
                     Text("id: \(element.identifier)")
-                        .font(.system(size: 8))
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 12))
+                        .fontWeight(element.isSelected ? .semibold : .medium)
+                        .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
+                        .lineLimit(1)
+                    
+                    // Show name as secondary if different from ID
+                    if !element.name.isEmpty && element.name != element.identifier {
+                        Text(element.name)
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                } else {
+                    // Fall back to name
+                    Text(element.name.isEmpty ? "(Unnamed Checkbox)" : element.name)
+                        .font(.system(size: 12))
+                        .fontWeight(element.isSelected ? .semibold : .regular)
+                        .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
                         .lineLimit(1)
                 }
             }
@@ -1446,25 +1484,34 @@ struct ElementNodeView: View {
             
             // Element details
             VStack(alignment: .leading, spacing: 1) {
-                // Element name with identifier
-                Text(element.name.isEmpty ? "(\(element.role))" : element.name)
-                    .font(.system(size: 12))
-                    .fontWeight(element.isSelected ? .bold : .regular)
-                    .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
-                    .lineLimit(1)
+                // Primary information: Identifier if available, otherwise name
+                if !element.identifier.isEmpty {
+                    Text("id: \(element.identifier)")
+                        .font(.system(size: 12))
+                        .fontWeight(element.isSelected ? .bold : .medium)
+                        .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
+                        .lineLimit(1)
+                    
+                    // Show name as secondary if both name and id exist and are different
+                    if !element.name.isEmpty && element.name != element.identifier {
+                        Text(element.name)
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                } else {
+                    // Fall back to name if no id
+                    Text(element.name.isEmpty ? "(\(element.role))" : element.name)
+                        .font(.system(size: 12))
+                        .fontWeight(element.isSelected ? .bold : .regular)
+                        .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
+                        .lineLimit(1)
+                }
                 
                 // Show value if available
                 if !element.value.isEmpty && element.value != "false" && element.value != "true" {
                     Text("Value: \(element.value)")
                         .font(.system(size: 9))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-                
-                // Show identifier if available
-                if !element.identifier.isEmpty {
-                    Text("id: \(element.identifier)")
-                        .font(.system(size: 8))
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
