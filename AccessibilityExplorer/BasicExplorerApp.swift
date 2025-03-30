@@ -36,6 +36,20 @@ class UIElement: Identifiable, ObservableObject {
     // Reference to the AXUIElement
     let axElement: AXUIElement?
     
+    // Enhanced accessibility attributes
+    var identifier: String = ""
+    var value: String = ""
+    var label: String = ""
+    var help: String = ""
+    var enabled: Bool = true
+    var focused: Bool = false
+    var selected: Bool = false
+    var position: NSPoint?
+    var size: NSSize?
+    var availableActions: [String] = []
+    var subrole: String = ""
+    var placeholderValue: String = ""
+    
     @Published var isExpanded = false
     @Published var isSelected = false
     @Published var children: [UIElement] = []
@@ -50,6 +64,100 @@ class UIElement: Identifiable, ObservableObject {
         self.description = description
         self.parent = parent
         self.axElement = axElement
+        
+        // Initialize additional properties if we have an AXUIElement
+        if let axElement = axElement {
+            loadBasicProperties(from: axElement)
+        }
+    }
+    
+    /// Load basic properties from the accessibility element
+    private func loadBasicProperties(from axElement: AXUIElement) {
+        // Load identifier
+        var valueRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(axElement, kAXIdentifierAttribute as CFString, &valueRef) == .success,
+           let value = valueRef as? String {
+            self.identifier = value
+        }
+        
+        // Load value
+        valueRef = nil
+        if AXUIElementCopyAttributeValue(axElement, kAXValueAttribute as CFString, &valueRef) == .success {
+            if let stringValue = valueRef as? String {
+                self.value = stringValue
+            } else if let numberValue = valueRef as? NSNumber {
+                self.value = numberValue.stringValue
+            } else if let boolValue = valueRef as? Bool {
+                self.value = boolValue ? "true" : "false"
+            }
+        }
+        
+        // Load enabled state
+        valueRef = nil
+        if AXUIElementCopyAttributeValue(axElement, kAXEnabledAttribute as CFString, &valueRef) == .success,
+           let enabled = valueRef as? Bool {
+            self.enabled = enabled
+        }
+        
+        // Load focused state
+        valueRef = nil
+        if AXUIElementCopyAttributeValue(axElement, kAXFocusedAttribute as CFString, &valueRef) == .success,
+           let focused = valueRef as? Bool {
+            self.focused = focused
+        }
+        
+        // Load selected state
+        valueRef = nil
+        if AXUIElementCopyAttributeValue(axElement, kAXSelectedAttribute as CFString, &valueRef) == .success,
+           let selected = valueRef as? Bool {
+            self.selected = selected
+        }
+        
+        // Load subrole
+        valueRef = nil
+        if AXUIElementCopyAttributeValue(axElement, kAXSubroleAttribute as CFString, &valueRef) == .success,
+           let subrole = valueRef as? String {
+            self.subrole = subrole
+        }
+        
+        // Load placeholder value
+        valueRef = nil
+        if AXUIElementCopyAttributeValue(axElement, kAXPlaceholderValueAttribute as CFString, &valueRef) == .success,
+           let placeholder = valueRef as? String {
+            self.placeholderValue = placeholder
+        }
+        
+        // Load help text
+        valueRef = nil
+        if AXUIElementCopyAttributeValue(axElement, kAXHelpAttribute as CFString, &valueRef) == .success,
+           let help = valueRef as? String {
+            self.help = help
+        }
+        
+        // Load position
+        valueRef = nil
+        if AXUIElementCopyAttributeValue(axElement, kAXPositionAttribute as CFString, &valueRef) == .success,
+           let positionValue = valueRef as? NSValue {
+            var point = NSPoint()
+            positionValue.getValue(&point)
+            self.position = point
+        }
+        
+        // Load size
+        valueRef = nil
+        if AXUIElementCopyAttributeValue(axElement, kAXSizeAttribute as CFString, &valueRef) == .success,
+           let sizeValue = valueRef as? NSValue {
+            var size = NSSize()
+            sizeValue.getValue(&size)
+            self.size = size
+        }
+        
+        // Load available actions
+        var actionsArrayRef: CFArray?
+        if AXUIElementCopyActionNames(axElement, &actionsArrayRef) == .success,
+           let actionNames = actionsArrayRef as? [String] {
+            self.availableActions = actionNames
+        }
     }
     
     func addChild(_ child: UIElement) {
@@ -336,7 +444,7 @@ class ExplorerViewModel: ObservableObject {
                             }
                         }
                         
-                        // Create child element
+                        // Create child element with enhanced attributes
                         let childElement = UIElement(
                             name: name,
                             role: role,
@@ -345,6 +453,37 @@ class ExplorerViewModel: ObservableObject {
                             parent: element,
                             axElement: child
                         )
+                        
+                        // Try to get additional attributes to enhance the tree view
+                        var valueRef: CFTypeRef?
+                        
+                        // Try to get a more informative description
+                        if valueRef == nil && 
+                           AXUIElementCopyAttributeValue(child, kAXHelpAttribute as CFString, &valueRef) == .success,
+                           let helpText = valueRef as? String, !helpText.isEmpty {
+                            childElement.help = helpText
+                        }
+                        
+                        // For text elements, try to get value
+                        if (role == "TextField" || role == "TextArea" || role == "StaticText") {
+                            valueRef = nil
+                            if AXUIElementCopyAttributeValue(child, kAXValueAttribute as CFString, &valueRef) == .success,
+                               let textValue = valueRef as? String {
+                                childElement.value = textValue
+                            }
+                        }
+                        
+                        // For checkboxes, radio buttons, try to get checked state
+                        if (role == "CheckBox" || role == "RadioButton") {
+                            valueRef = nil
+                            if AXUIElementCopyAttributeValue(child, kAXValueAttribute as CFString, &valueRef) == .success {
+                                if let boolValue = valueRef as? Bool {
+                                    childElement.value = boolValue ? "checked" : "unchecked"
+                                } else if let intValue = valueRef as? Int {
+                                    childElement.value = intValue == 1 ? "checked" : "unchecked"
+                                }
+                            }
+                        }
                         
                         // Add to new children list
                         newChildren.append(childElement)
@@ -711,83 +850,272 @@ struct ElementNodeView: View {
     /// Button visualization
     private var buttonVisualization: some View {
         HStack {
-            // Button icon
-            Image(systemName: "button.programmable")
-                .foregroundColor(element.isSelected ? .blue : .primary)
-                .frame(width: 16, height: 16)
+            // Button icon with state indicators
+            ZStack {
+                Image(systemName: "button.programmable")
+                    .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
+                    .frame(width: 16, height: 16)
+                
+                // Show focused indicator
+                if element.focused {
+                    Circle()
+                        .stroke(Color.blue, lineWidth: 1)
+                        .frame(width: 20, height: 20)
+                }
+            }
             
             // Compact button rendering
             RoundedRectangle(cornerRadius: 4)
-                .fill(element.isSelected ? Color.blue.opacity(0.3) : Color.gray.opacity(0.1))
+                .fill(element.isSelected ? Color.blue.opacity(0.3) : 
+                     (element.enabled ? Color.gray.opacity(0.1) : Color.gray.opacity(0.05)))
                 .overlay(
-                    Text(element.name)
-                        .font(.system(size: 12))
-                        .fontWeight(element.isSelected ? .semibold : .regular)
-                        .foregroundColor(element.isSelected ? .blue : .primary)
-                        .lineLimit(1)
-                        .padding(.horizontal, 4)
+                    VStack(alignment: .leading, spacing: 1) {
+                        // Button title
+                        Text(element.name.isEmpty ? "(Unnamed Button)" : element.name)
+                            .font(.system(size: 12))
+                            .fontWeight(element.isSelected ? .semibold : .regular)
+                            .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
+                            .lineLimit(1)
+                            .padding(.horizontal, 4)
+                        
+                        // Show identifier if available
+                        if !element.identifier.isEmpty {
+                            Text("id: \(element.identifier)")
+                                .font(.system(size: 8))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .padding(.horizontal, 4)
+                        }
+                    }
                 )
-                .frame(height: 20)
-                .frame(minWidth: 60, maxWidth: 120)
+                .frame(height: element.identifier.isEmpty ? 20 : 30)
+                .frame(minWidth: 60, maxWidth: 150)
             
-            // Role caption
-            Text("Button")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            // Status indicators and info
+            VStack(alignment: .leading, spacing: 2) {
+                // Role with subrole if available
+                Text(element.subrole.isEmpty ? "Button" : "Button (\(element.subrole))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                // State indicators
+                HStack(spacing: 4) {
+                    if !element.enabled {
+                        Text("Disabled")
+                            .font(.system(size: 8))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.gray.opacity(0.2))
+                            .cornerRadius(3)
+                    }
+                    
+                    if element.focused {
+                        Text("Focused")
+                            .font(.system(size: 8))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.blue.opacity(0.2))
+                            .cornerRadius(3)
+                    }
+                    
+                    if !element.availableActions.isEmpty {
+                        Text("\(element.availableActions.count) actions")
+                            .font(.system(size: 8))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.green.opacity(0.2))
+                            .cornerRadius(3)
+                    }
+                }
+            }
         }
     }
     
     /// Text field visualization
     private var textFieldVisualization: some View {
         HStack {
-            // Text field icon
-            Image(systemName: "text.cursor")
-                .foregroundColor(element.isSelected ? .blue : .primary)
-                .frame(width: 16, height: 16)
+            // Text field icon with state indicators
+            ZStack {
+                Image(systemName: "text.cursor")
+                    .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
+                    .frame(width: 16, height: 16)
+                
+                // Show focused indicator
+                if element.focused {
+                    Circle()
+                        .stroke(Color.blue, lineWidth: 1)
+                        .frame(width: 20, height: 20)
+                }
+            }
             
             // Text field mock
-            RoundedRectangle(cornerRadius: 4)
-                .stroke(element.isSelected ? Color.blue : Color.gray, lineWidth: 1)
-                .background(Color.white.opacity(0.5))
-                .frame(height: 20)
-                .frame(minWidth: 80, maxWidth: 150)
-                .overlay(
-                    HStack {
-                        Text(element.name)
-                            .font(.system(size: 11))
-                            .foregroundColor(element.isSelected ? .blue : .gray)
-                            .padding(.leading, 4)
-                            .lineLimit(1)
-                        Spacer()
-                    }
-                )
+            VStack(alignment: .leading, spacing: 1) {
+                // Display placeholder or value
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(element.isSelected ? Color.blue : element.enabled ? Color.gray : Color.gray.opacity(0.5), lineWidth: 1)
+                    .background(element.enabled ? Color.white.opacity(0.5) : Color.gray.opacity(0.1))
+                    .frame(height: 22)
+                    .frame(minWidth: 80, maxWidth: 180)
+                    .overlay(
+                        HStack {
+                            if !element.value.isEmpty {
+                                // Show actual value
+                                Text(element.value)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(element.isSelected ? .blue : element.enabled ? .black : .gray)
+                                    .padding(.leading, 4)
+                                    .lineLimit(1)
+                            } else if !element.placeholderValue.isEmpty {
+                                // Show placeholder text
+                                Text(element.placeholderValue)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.gray.opacity(0.8))
+                                    .padding(.leading, 4)
+                                    .lineLimit(1)
+                                    .italic()
+                            } else {
+                                // Show name as fallback
+                                Text(element.name.isEmpty ? "(Unnamed Field)" : element.name)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(element.isSelected ? .blue : .gray)
+                                    .padding(.leading, 4)
+                                    .lineLimit(1)
+                            }
+                            Spacer()
+                        }
+                    )
+                
+                // Show identifier if available
+                if !element.identifier.isEmpty {
+                    Text("id: \(element.identifier)")
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
             
-            // Role caption
-            Text(element.role)
-                .font(.caption)
-                .foregroundColor(.secondary)
+            // Role and state info
+            VStack(alignment: .leading, spacing: 2) {
+                // Show role with more specific info
+                Text(element.role)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                // State indicators
+                HStack(spacing: 4) {
+                    if !element.enabled {
+                        Text("Disabled")
+                            .font(.system(size: 8))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.gray.opacity(0.2))
+                            .cornerRadius(3)
+                    }
+                    
+                    if element.focused {
+                        Text("Focused")
+                            .font(.system(size: 8))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.blue.opacity(0.2))
+                            .cornerRadius(3)
+                    }
+                    
+                    if element.value.count > 0 {
+                        Text("Has Text")
+                            .font(.system(size: 8))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.green.opacity(0.2))
+                            .cornerRadius(3)
+                    }
+                }
+            }
         }
     }
     
     /// Checkbox visualization
     private var checkboxVisualization: some View {
         HStack {
-            // Checkbox icon
-            Image(systemName: "checkmark.square")
-                .foregroundColor(element.isSelected ? .blue : .primary)
-                .frame(width: 16, height: 16)
+            // Checkbox icon with state information
+            ZStack {
+                // Show actual checkbox state (checked/unchecked)
+                Image(systemName: element.value.contains("checked") || element.value == "1" || element.value == "true" ? 
+                      "checkmark.square.fill" : "square")
+                    .foregroundColor(element.isSelected ? .blue : 
+                                     element.enabled ? (element.value.contains("checked") || element.value == "1" || element.value == "true" ? .blue : .primary) : .gray)
+                    .frame(width: 16, height: 16)
+                
+                // Show focused indicator
+                if element.focused {
+                    RoundedRectangle(cornerRadius: 2)
+                        .stroke(Color.blue, lineWidth: 1)
+                        .frame(width: 20, height: 20)
+                }
+            }
             
-            // Checkbox label
-            Text(element.name)
-                .font(.system(size: 12))
-                .fontWeight(element.isSelected ? .semibold : .regular)
-                .foregroundColor(element.isSelected ? .blue : .primary)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 1) {
+                // Checkbox label
+                Text(element.name.isEmpty ? "(Unnamed Checkbox)" : element.name)
+                    .font(.system(size: 12))
+                    .fontWeight(element.isSelected ? .semibold : .regular)
+                    .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
+                    .lineLimit(1)
+                
+                // Show identifier if available
+                if !element.identifier.isEmpty {
+                    Text("id: \(element.identifier)")
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
             
-            // Role caption
-            Text("Checkbox")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            // State information
+            VStack(alignment: .leading, spacing: 2) {
+                // Role with state
+                HStack {
+                    Text("Checkbox")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    if element.value.contains("checked") || element.value == "1" || element.value == "true" {
+                        Text("✓")
+                            .font(.caption.bold())
+                            .foregroundColor(.green)
+                    }
+                }
+                
+                // State indicators
+                HStack(spacing: 4) {
+                    if !element.enabled {
+                        Text("Disabled")
+                            .font(.system(size: 8))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.gray.opacity(0.2))
+                            .cornerRadius(3)
+                    }
+                    
+                    if element.focused {
+                        Text("Focused")
+                            .font(.system(size: 8))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.blue.opacity(0.2))
+                            .cornerRadius(3)
+                    }
+                    
+                    if element.value.contains("checked") || element.value == "1" || element.value == "true" {
+                        Text("Checked")
+                            .font(.system(size: 8))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.green.opacity(0.2))
+                            .cornerRadius(3)
+                    }
+                }
+            }
         }
     }
     
@@ -1102,21 +1430,107 @@ struct ElementNodeView: View {
     /// Default visualization for other element types
     private var defaultVisualization: some View {
         HStack {
-            // Element icon
-            Image(systemName: iconForRole(element.role))
-                .foregroundColor(element.isSelected ? .blue : .primary)
-                .frame(width: 16, height: 16)
+            // Element icon with state indicators
+            ZStack {
+                Image(systemName: iconForRole(element.role))
+                    .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
+                    .frame(width: 16, height: 16)
+                
+                // Show focused indicator
+                if element.focused {
+                    Circle()
+                        .stroke(Color.blue, lineWidth: 1)
+                        .frame(width: 20, height: 20)
+                }
+            }
             
-            // Element name and role
-            VStack(alignment: .leading, spacing: 2) {
-                Text(element.name)
+            // Element details
+            VStack(alignment: .leading, spacing: 1) {
+                // Element name with identifier
+                Text(element.name.isEmpty ? "(\(element.role))" : element.name)
                     .font(.system(size: 12))
                     .fontWeight(element.isSelected ? .bold : .regular)
-                    .foregroundColor(element.isSelected ? .blue : .primary)
+                    .foregroundColor(element.isSelected ? .blue : element.enabled ? .primary : .gray)
+                    .lineLimit(1)
                 
-                Text(element.role)
+                // Show value if available
+                if !element.value.isEmpty && element.value != "false" && element.value != "true" {
+                    Text("Value: \(element.value)")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                
+                // Show identifier if available
+                if !element.identifier.isEmpty {
+                    Text("id: \(element.identifier)")
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                
+                // Show help text if available
+                if !element.help.isEmpty {
+                    Text(element.help)
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .italic()
+                }
+            }
+            
+            // State and role information
+            VStack(alignment: .leading, spacing: 2) {
+                // Role with subrole if available
+                Text(element.subrole.isEmpty ? element.role : "\(element.role) (\(element.subrole))")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                
+                // State indicators and available actions
+                HStack(spacing: 4) {
+                    if !element.enabled {
+                        Text("Disabled")
+                            .font(.system(size: 8))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.gray.opacity(0.2))
+                            .cornerRadius(3)
+                    }
+                    
+                    if element.focused {
+                        Text("Focused")
+                            .font(.system(size: 8))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.blue.opacity(0.2))
+                            .cornerRadius(3)
+                    }
+                    
+                    if element.selected {
+                        Text("Selected")
+                            .font(.system(size: 8))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.green.opacity(0.2))
+                            .cornerRadius(3)
+                    }
+                    
+                    if !element.availableActions.isEmpty {
+                        Text("\(element.availableActions.count) actions")
+                            .font(.system(size: 8))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.purple.opacity(0.2))
+                            .cornerRadius(3)
+                    }
+                }
+                
+                // Position indicator if available
+                if let position = element.position {
+                    Text("[\(Int(position.x)),\(Int(position.y))]")
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
+                }
             }
         }
     }
