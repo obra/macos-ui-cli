@@ -1799,24 +1799,6 @@ struct ElementDetailsView: View {
                 ElementHeader(element: element)
             }
             
-            // Tab selection
-            HStack {
-                ForEach(0..<3) { index in
-                    Button(action: {
-                        selectedTab = index
-                    }) {
-                        Text(tabTitle(for: index))
-                            .font(.subheadline)
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 16)
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .background(selectedTab == index ? Color.blue.opacity(0.1) : Color.clear)
-                }
-                Spacer()
-            }
-            .padding(.horizontal)
-            
             // Properties content
             if viewModel.properties.isEmpty {
                 Text("No properties available")
@@ -1824,17 +1806,36 @@ struct ElementDetailsView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    VStack(alignment: .leading) {
-                        switch selectedTab {
-                        case 0: // Basic properties
-                            PropertiesView(properties: basicProperties())
-                        case 1: // All properties
-                            PropertiesView(properties: allProperties())
-                        case 2: // Actions
-                            ActionsView()
-                        default:
-                            EmptyView()
+                    VStack(alignment: .leading, spacing: 24) {
+                        // Actions section
+                        if viewModel.selectedElement != nil {
+                            VStack(alignment: .leading, spacing: 12) {
+                                // Heading
+                                Text("Actions")
+                                    .font(.headline)
+                                    .padding(.bottom, 4)
+                                
+                                // Actions content
+                                ActionsView()
+                            }
+                            .padding()
+                            .background(Color(.windowBackgroundColor).opacity(0.5))
+                            .cornerRadius(8)
                         }
+                        
+                        // Properties section
+                        VStack(alignment: .leading, spacing: 12) {
+                            // Heading
+                            Text("Properties")
+                                .font(.headline)
+                                .padding(.bottom, 4)
+                            
+                            // Properties content
+                            PropertiesView(properties: allProperties())
+                        }
+                        .padding()
+                        .background(Color(.windowBackgroundColor).opacity(0.5))
+                        .cornerRadius(8)
                     }
                     .padding()
                 }
@@ -1991,55 +1992,59 @@ struct ActionsView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Available Actions")
-                .font(.headline)
-            
             if showingActionResult {
                 actionResultView
             }
             
             if let element = viewModel.selectedElement {
-                ForEach(actionsForElement(element), id: \.0) { action in
-                    HStack {
-                        Image(systemName: iconForAction(action.0))
-                            .frame(width: 20, height: 20)
-                        
-                        VStack(alignment: .leading) {
-                            Text(action.0)
-                                .font(.body)
-                            
-                            Text(action.1)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        Spacer()
-                        
-                        if isPerformingAction {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                        } else {
-                            Button("Perform") {
-                                performAction(action.0, on: element)
+                let actions = actionsForElement(element)
+                if actions.isEmpty {
+                    Text("No actions available for this element")
+                        .foregroundColor(.secondary)
+                        .padding(.vertical, 8)
+                } else {
+                    LazyVGrid(columns: [GridItem(.flexible())], spacing: 8) {
+                        ForEach(actions, id: \.0) { action in
+                            HStack {
+                                Image(systemName: iconForAction(action.0))
+                                    .frame(width: 20, height: 20)
+                                
+                                VStack(alignment: .leading) {
+                                    Text(action.0)
+                                        .font(.body)
+                                    
+                                    Text(action.1)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                Spacer()
+                                
+                                if isPerformingAction {
+                                    ProgressView()
+                                        .scaleEffect(0.7)
+                                } else {
+                                    Button("Perform") {
+                                        performAction(action.0, on: element)
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
                             }
-                            .buttonStyle(.bordered)
+                            .padding(8)
+                            .background(Color(.textBackgroundColor))
+                            .cornerRadius(6)
                         }
                     }
-                    .padding()
-                    .background(Color(.windowBackgroundColor))
-                    .cornerRadius(8)
+                    
+                    Text("Note: Actions will affect the actual application UI.")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                        .padding(.top, 4)
                 }
-                
-                Text("Note: Actions will affect the actual application UI.")
-                    .font(.caption)
-                    .foregroundColor(.blue)
-                    .padding(.top)
             } else {
                 Text("No element selected")
                     .foregroundColor(.secondary)
             }
-            
-            Spacer()
         }
         .sheet(isPresented: $showingTextInput) {
             textInputSheet
