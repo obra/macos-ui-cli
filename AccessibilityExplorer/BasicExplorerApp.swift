@@ -391,13 +391,8 @@ class ExplorerViewModel: ObservableObject {
                 }
             }
             
-            // Get and display all supported user actions
-            if let self = self {
-                let supportedActions = self.actionsForElement(element).map { $0.0 }
-                if !supportedActions.isEmpty {
-                    properties["Supported User Actions"] = supportedActions.joined(separator: ", ")
-                }
-            }
+            // We'll get the supported user actions in the main queue after this completes
+            // to avoid circular dependencies
             
             DispatchQueue.main.async {
                 self?.properties = properties
@@ -479,30 +474,15 @@ class ExplorerViewModel: ObservableObject {
                 // Process each child on the queue
                 processingGroup.enter()
                 
-                // Create child element with optimization
-                if let childElement = self.createAndOptimizeElement(
+                // Create child element
+                if let childElement = self.createElement(
                     axElement: axChild,
                     parent: parentElement
                 ) {
-                    // Apply optimization to handle AXGroup elements
-                    if childElement.role == "AXGroup" || childElement.role == "Group" {
-                        // For groups, check if they're empty or have only one child
-                        self.processGroupElement(childElement) { result in
-                            if let optimizedElement = result {
-                                childrenQueue.async {
-                                    processedChildren.append(optimizedElement)
-                                    processingGroup.leave()
-                                }
-                            } else {
-                                processingGroup.leave()
-                            }
-                        }
-                    } else {
-                        // For non-group elements, just add to the list
-                        childrenQueue.async {
-                            processedChildren.append(childElement)
-                            processingGroup.leave()
-                        }
+                    // Add all elements to the list without any special group handling
+                    childrenQueue.async {
+                        processedChildren.append(childElement)
+                        processingGroup.leave()
                     }
                 } else {
                     // No element created
@@ -521,7 +501,7 @@ class ExplorerViewModel: ObservableObject {
                     // Create elements for important roles that might have been missed in optimization
                     let importantRoles = ["Menu", "MenuItem", "MenuBar", "MenuBarItem"]
                     if importantRoles.contains(role) {
-                        return self.createAndOptimizeElement(axElement: axChild, parent: parentElement)
+                        return self.createElement(axElement: axChild, parent: parentElement)
                     }
                     return nil
                 }
@@ -545,54 +525,14 @@ class ExplorerViewModel: ObservableObject {
     }
     
     /// Create an element with basic attribute loading
-    private func createAndOptimizeElement(axElement: AXUIElement, parent: UIElement) -> UIElement? {
+    private func createElement(axElement: AXUIElement, parent: UIElement) -> UIElement? {
         // Get role
         var roleRef: CFTypeRef?
         AXUIElementCopyAttributeValue(axElement, kAXRoleAttribute as CFString, &roleRef)
         let role = (roleRef as? String) ?? "Unknown"
         
-        // Only optimize AXGroup elements - leave all other elements alone
-        // Note: Make sure we only elide truly empty groups with no useful information
-        if (role == "AXGroup" || role == "Group") {
-            // Check if the group has any children
-            var hasChildren = false
-            var childrenRef: CFTypeRef?
-            if AXUIElementCopyAttributeValue(axElement, kAXChildrenAttribute as CFString, &childrenRef) == .success,
-               let childArray = childrenRef as? [AXUIElement], !childArray.isEmpty {
-                hasChildren = true
-            }
-            
-            // Check if the group has any useful attributes
-            var hasUsefulAttributes = false
-            
-            // Check for identifier
-            var identifierRef: CFTypeRef?
-            if AXUIElementCopyAttributeValue(axElement, kAXIdentifierAttribute as CFString, &identifierRef) == .success,
-               let identifier = identifierRef as? String, !identifier.isEmpty {
-                hasUsefulAttributes = true
-            }
-            
-            // Check for title/name
-            var titleRef: CFTypeRef?
-            if !hasUsefulAttributes && 
-               AXUIElementCopyAttributeValue(axElement, kAXTitleAttribute as CFString, &titleRef) == .success,
-               let title = titleRef as? String, !title.isEmpty {
-                hasUsefulAttributes = true
-            }
-            
-            // Check for description
-            var descRef: CFTypeRef?
-            if !hasUsefulAttributes && 
-               AXUIElementCopyAttributeValue(axElement, kAXDescriptionAttribute as CFString, &descRef) == .success,
-               let desc = descRef as? String, !desc.isEmpty {
-                hasUsefulAttributes = true
-            }
-            
-            // Skip only truly empty groups with no children and no useful attributes
-            if !hasChildren && !hasUsefulAttributes {
-                return nil
-            }
-        }
+        // No special handling for group elements - keep all elements
+        // (Removed the group optimization functionality)
         
         // Get name/title
         var titleRef: CFTypeRef?
@@ -692,83 +632,10 @@ class ExplorerViewModel: ObservableObject {
         }
     }
     
-    /// Process an AXGroup element with hierarchy optimization
+    /// Process an AXGroup element without optimization - simply keeps the group as-is
     private func processGroupElement(_ groupElement: UIElement, completion: @escaping (UIElement?) -> Void) {
-        guard let axElement = groupElement.axElement else {
-            completion(groupElement)
-            return
-        }
-        
-        // Check if the group has children
-        var childrenRef: CFTypeRef?
-        let result = AXUIElementCopyAttributeValue(axElement, kAXChildrenAttribute as CFString, &childrenRef)
-        
-        if result == .success, let childrenArray = childrenRef as? [AXUIElement] {
-            if childrenArray.isEmpty {
-                // Empty group with no children - skip only if truly useless
-                if groupElement.identifier.isEmpty && groupElement.name.isEmpty && groupElement.help.isEmpty {
-                    completion(nil)
-                } else {
-                    completion(groupElement)
-                }
-            } else if childrenArray.count == 1 {
-                // Group with single child - optimize by lifting the child
-                let singleAXChild = childrenArray[0]
-                
-                // Get role of child to make sure we don't flatten important containers
-                var childRoleRef: CFTypeRef?
-                AXUIElementCopyAttributeValue(singleAXChild, kAXRoleAttribute as CFString, &childRoleRef)
-                let childRole = (childRoleRef as? String) ?? "Unknown"
-                
-                // Don't optimize if the child is an important UI element that should stay nested
-                // This prevents flattening key menu structures and other important hierarchies
-                let importantRoles = ["MenuBar", "Menu", "MenuItem", "TabGroup", "Table", "List", "Outline"]
-                if importantRoles.contains(childRole) {
-                    // Load children the regular way for important elements
-                    loadRegularChildren(for: groupElement, from: childrenArray) { success in
-                        completion(groupElement)
-                    }
-                    return
-                }
-                
-                // Create the child element
-                if let childElement = createAndOptimizeElement(
-                    axElement: singleAXChild,
-                    parent: groupElement.parent ?? groupElement) {
-                    
-                    // Preserve group's attributes on the child if they're not already set
-                    if !groupElement.identifier.isEmpty && childElement.identifier.isEmpty {
-                        childElement.identifier = groupElement.identifier
-                    }
-                    
-                    if !groupElement.name.isEmpty && childElement.name.isEmpty {
-                        childElement.name = groupElement.name
-                    }
-                    
-                    if !groupElement.help.isEmpty && childElement.help.isEmpty {
-                        childElement.help = groupElement.help
-                    }
-                    
-                    // Set the proper parent
-                    childElement.parent = groupElement.parent
-                    
-                    // Return the optimized child instead of the group
-                    completion(childElement)
-                } else {
-                    // If child creation failed, use the original group
-                    completion(groupElement)
-                }
-            } else {
-                // Group with multiple children - keep as is
-                // Load the children for this group
-                loadRegularChildren(for: groupElement, from: childrenArray) { success in
-                    completion(groupElement)
-                }
-            }
-        } else {
-            // Couldn't get children - keep as is
-            completion(groupElement)
-        }
+        // Always keep the group element as-is, no optimization
+        completion(groupElement)
     }
     
     /// Load children without hierarchy optimization
@@ -778,7 +645,7 @@ class ExplorerViewModel: ObservableObject {
         var newChildren: [UIElement] = []
         
         for axChild in childrenToProcess {
-            if let childElement = createAndOptimizeElement(
+            if let childElement = createElement(
                 axElement: axChild,
                 parent: element
             ) {
@@ -2472,6 +2339,10 @@ struct ActionsView: View {
                 }
             }
             return
+                
+        default:
+            // Allow fallthrough to the generic action handling below
+            break
         }
         
         // For all other actions, determine the AX action name and use the generic handler
@@ -2539,7 +2410,7 @@ struct ActionsView: View {
         
         // First, get a list of all actions supported by the element
         // This ensures we don't miss any actions provided by the accessibility API
-        if let axElement = element.axElement, !element.availableActions.isEmpty {
+        if let _ = element.axElement, !element.availableActions.isEmpty {
             // Add all available actions from the element
             for actionName in element.availableActions {
                 // Map AX action names to user-friendly names and descriptions
