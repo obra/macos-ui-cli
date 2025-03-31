@@ -897,6 +897,36 @@ struct ElementTreeView: View {
     }
 }
 
+/// Shows available actions for an element in a compact form
+struct ElementActionsView: View {
+    let actions: [String]
+    
+    var body: some View {
+        if !actions.isEmpty {
+            HStack(spacing: 4) {
+                ForEach(actions.prefix(3), id: \.self) { action in
+                    let actionName = action.replacingOccurrences(of: "AX", with: "")
+                    Text(actionName)
+                        .font(.system(size: 8))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Color.green.opacity(0.2))
+                        .cornerRadius(3)
+                }
+                
+                if actions.count > 3 {
+                    Text("+\(actions.count - 3)")
+                        .font(.system(size: 8))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Color.green.opacity(0.1))
+                        .cornerRadius(3)
+                }
+            }
+        }
+    }
+}
+
 /// A node in the element tree
 struct ElementNodeView: View {
     @ObservedObject var element: UIElement
@@ -1054,13 +1084,8 @@ struct ElementNodeView: View {
                 .frame(height: element.identifier.isEmpty ? 20 : 30)
                 .frame(minWidth: 60, maxWidth: 150)
             
-            // Status indicators and info
+            // Status indicators and actions
             VStack(alignment: .leading, spacing: 2) {
-                // Role with subrole if available
-                Text(element.subrole.isEmpty ? "Button" : "Button (\(element.subrole))")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
                 // State indicators
                 HStack(spacing: 4) {
                     if !element.enabled {
@@ -1080,16 +1105,10 @@ struct ElementNodeView: View {
                             .background(Color.blue.opacity(0.2))
                             .cornerRadius(3)
                     }
-                    
-                    if !element.availableActions.isEmpty {
-                        Text("\(element.availableActions.count) actions")
-                            .font(.system(size: 8))
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(Color.green.opacity(0.2))
-                            .cornerRadius(3)
-                    }
                 }
+                
+                // Show available actions
+                ElementActionsView(actions: element.availableActions)
             }
         }
     }
@@ -1189,13 +1208,8 @@ struct ElementNodeView: View {
                     )
             }
             
-            // Role and state info
+            // State and actions info
             VStack(alignment: .leading, spacing: 2) {
-                // Show role with more specific info
-                Text(element.role)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
                 // State indicators
                 HStack(spacing: 4) {
                     if !element.enabled {
@@ -1225,6 +1239,9 @@ struct ElementNodeView: View {
                             .cornerRadius(3)
                     }
                 }
+                
+                // Show available actions
+                ElementActionsView(actions: element.availableActions)
             }
         }
     }
@@ -1285,17 +1302,11 @@ struct ElementNodeView: View {
             
             // State information
             VStack(alignment: .leading, spacing: 2) {
-                // Role with state
-                HStack {
-                    Text("Checkbox")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    if element.value.contains("checked") || element.value == "1" || element.value == "true" {
-                        Text("✓")
-                            .font(.caption.bold())
-                            .foregroundColor(.green)
-                    }
+                // Checkbox state indicator
+                if element.value.contains("checked") || element.value == "1" || element.value == "true" {
+                    Text("✓ Checked")
+                        .font(.caption.bold())
+                        .foregroundColor(.green)
                 }
                 
                 // State indicators
@@ -1327,6 +1338,9 @@ struct ElementNodeView: View {
                             .cornerRadius(3)
                     }
                 }
+                
+                // Show available actions
+                ElementActionsView(actions: element.availableActions)
             }
         }
     }
@@ -1346,10 +1360,10 @@ struct ElementNodeView: View {
                 .foregroundColor(element.isSelected ? .blue : .primary)
                 .lineLimit(1)
             
-            // Role caption
-            Text("Radio")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            Spacer()
+            
+            // Show available actions
+            ElementActionsView(actions: element.availableActions)
         }
     }
     
@@ -1372,10 +1386,10 @@ struct ElementNodeView: View {
                 .background(element.isSelected ? Color.blue.opacity(0.1) : Color.clear)
                 .cornerRadius(3)
             
-            // Role caption
-            Text(element.role)
-                .font(.caption)
-                .foregroundColor(.secondary)
+            Spacer()
+            
+            // Show available actions
+            ElementActionsView(actions: element.availableActions)
         }
     }
     
@@ -1410,10 +1424,10 @@ struct ElementNodeView: View {
                     .cornerRadius(1)
             }
             
-            // Role caption
-            Text("Tabs")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            Spacer()
+            
+            // Show available actions
+            ElementActionsView(actions: element.availableActions)
         }
     }
     
@@ -1449,10 +1463,10 @@ struct ElementNodeView: View {
                     .cornerRadius(3)
             }
             
-            // Role caption
-            Text("ScrollArea")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            Spacer()
+            
+            // Show available actions
+            ElementActionsView(actions: element.availableActions)
         }
     }
     
@@ -1476,16 +1490,14 @@ struct ElementNodeView: View {
                 )
                 .cornerRadius(2)
             
-            // Name and role
+            // Name and actions
             VStack(alignment: .leading, spacing: 0) {
                 Text(element.name)
                     .font(.system(size: 12))
                     .fontWeight(element.isSelected ? .semibold : .regular)
                     .foregroundColor(element.isSelected ? .blue : .primary)
                 
-                Text("Slider")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                ElementActionsView(actions: element.availableActions)
             }
         }
     }
@@ -1505,10 +1517,10 @@ struct ElementNodeView: View {
                 .foregroundColor(element.isSelected ? .blue : .primary)
                 .lineLimit(1)
             
-            // Role caption
-            Text("Text")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            Spacer()
+            
+            // Show available actions
+            ElementActionsView(actions: element.availableActions)
         }
     }
     
@@ -1530,16 +1542,14 @@ struct ElementNodeView: View {
                         .foregroundColor(element.isSelected ? Color.blue.opacity(0.5) : Color.gray.opacity(0.5))
                 )
             
-            // Name and role
+            // Name and actions
             VStack(alignment: .leading, spacing: 0) {
                 Text(element.name)
                     .font(.system(size: 12))
                     .fontWeight(element.isSelected ? .semibold : .regular)
                     .foregroundColor(element.isSelected ? .blue : .primary)
                 
-                Text("Image")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                ElementActionsView(actions: element.availableActions)
             }
         }
     }
@@ -1584,10 +1594,10 @@ struct ElementNodeView: View {
             .background(Color.gray.opacity(0.1))
             .cornerRadius(4)
             
-            // Role caption
-            Text("Window")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            Spacer()
+            
+            // Show available actions
+            ElementActionsView(actions: element.availableActions)
         }
     }
     
@@ -1625,16 +1635,14 @@ struct ElementNodeView: View {
             }
             .cornerRadius(2)
             
-            // Name and role
+            // Name and actions
             VStack(alignment: .leading, spacing: 0) {
                 Text(element.name)
                     .font(.system(size: 12))
                     .fontWeight(element.isSelected ? .semibold : .regular)
                     .foregroundColor(element.isSelected ? .blue : .primary)
                 
-                Text("Table")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                ElementActionsView(actions: element.availableActions)
             }
         }
     }
@@ -1707,12 +1715,8 @@ struct ElementNodeView: View {
                 }
             }
             
-            // State and role information
+            // State information
             VStack(alignment: .leading, spacing: 2) {
-                // Role with subrole if available
-                Text(element.subrole.isEmpty ? element.role : "\(element.role) (\(element.subrole))")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
                 
                 // State indicators and available actions
                 HStack(spacing: 4) {
@@ -1743,15 +1747,10 @@ struct ElementNodeView: View {
                             .cornerRadius(3)
                     }
                     
-                    if !element.availableActions.isEmpty {
-                        Text("\(element.availableActions.count) actions")
-                            .font(.system(size: 8))
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(Color.purple.opacity(0.2))
-                            .cornerRadius(3)
-                    }
                 }
+                
+                // Show available actions
+                ElementActionsView(actions: element.availableActions)
                 
                 // Position indicator if available
                 if let position = element.position {
