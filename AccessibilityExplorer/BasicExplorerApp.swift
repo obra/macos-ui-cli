@@ -213,16 +213,20 @@ class ExplorerViewModel: ObservableObject {
             let workspace = NSWorkspace.shared
             let runningApps = workspace.runningApplications
             
-            // Filter to only apps with UI (limited to max 10)
-            let uiApps = runningApps.filter { $0.activationPolicy == .regular }.prefix(10)
+            // Get apps with UI (both regular apps and accessory/background apps that might have UI)
+            let uiApps = runningApps.filter { 
+                // Include all apps with UI or that might have UI
+                $0.activationPolicy == .regular || $0.activationPolicy == .accessory 
+            }
             
             for app in uiApps {
                 if let bundleID = app.bundleIdentifier {
+                    // Add to the list with more detailed info
                     apps.append(AppInfo(
-                        name: app.localizedName ?? "Unknown",
+                        name: app.localizedName ?? bundleID.components(separatedBy: ".").last ?? "Unknown",
                         bundleID: bundleID,
                         pid: app.processIdentifier,
-                        icon: "app"
+                        icon: app.activationPolicy == .regular ? "app" : "app.dashed"
                     ))
                 }
             }
@@ -789,12 +793,59 @@ struct ContentView: View {
 /// Sidebar showing applications
 struct ApplicationsSidebar: View {
     @EnvironmentObject private var viewModel: ExplorerViewModel
+    @State private var searchText: String = ""
+    
+    private var filteredApps: [AppInfo] {
+        if searchText.isEmpty {
+            return viewModel.applications
+        } else {
+            return viewModel.applications.filter { app in
+                app.name.localizedCaseInsensitiveContains(searchText) ||
+                app.bundleID.localizedCaseInsensitiveContains(searchText) ||
+                String(app.pid).contains(searchText)
+            }
+        }
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Applications")
-                .font(.headline)
-                .padding()
+            HStack {
+                Text("Applications")
+                    .font(.headline)
+                
+                Spacer()
+                
+                Button(action: {
+                    viewModel.loadApplications()
+                }) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(PlainButtonStyle())
+                .disabled(viewModel.isLoading)
+            }
+            .padding()
+            
+            // Search field
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.secondary)
+                
+                TextField("Search", text: $searchText)
+                    .textFieldStyle(PlainTextFieldStyle())
+                
+                if !searchText.isEmpty {
+                    Button(action: {
+                        searchText = ""
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
             
             if viewModel.isLoading && viewModel.applications.isEmpty {
                 VStack {
@@ -806,13 +857,19 @@ struct ApplicationsSidebar: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List {
-                    ForEach(viewModel.applications) { app in
+                    ForEach(filteredApps) { app in
                         ApplicationRow(app: app)
                             .contentShape(Rectangle())
                             .onTapGesture {
                                 viewModel.selectApplication(app)
                             }
                             .background(viewModel.selectedApp?.id == app.id ? Color.blue.opacity(0.1) : Color.clear)
+                    }
+                    
+                    if filteredApps.isEmpty && !viewModel.applications.isEmpty {
+                        Text("No matching applications")
+                            .foregroundColor(.secondary)
+                            .padding()
                     }
                 }
                 .listStyle(SidebarListStyle())
@@ -831,9 +888,15 @@ struct ApplicationRow: View {
             Image(systemName: iconForApp(app))
                 .frame(width: 20, height: 20)
             
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(app.name)
                     .fontWeight(viewModel.selectedApp?.id == app.id ? .bold : .regular)
+                
+                // Bundle ID helps identify unfamiliar applications
+                Text(app.bundleID)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
                 
                 Text("PID: \(app.pid)")
                     .font(.caption)
